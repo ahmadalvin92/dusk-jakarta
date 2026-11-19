@@ -1,26 +1,83 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-mono), ui-monospace, SFMono-Regular, monospace;
+  --color-dusk-ink: #09070f;
+  --color-dusk-surface: #0e0a16;
+  --color-dusk-card: #140f1d;
+  --color-dusk-orange: #ff7a3d;
+  --color-dusk-peach: #ff9e68;
+  --color-dusk-lilac: #bb87fa;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+:root {
+  --dusk-ink: #09070f;
+  --dusk-surface: #0e0a16;
+  --dusk-line: rgba(255, 158, 104, 0.16);
+  --dusk-orange: #ff7a3d;
+  --dusk-peach: #ff9e68;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background-color: var(--dusk-ink);
+  background-image: radial-gradient(
+      circle at 18% 0%,
+      rgba(255, 107, 43, 0.11),
+      transparent 42%
+    ),
+    radial-gradient(
+      circle at 85% 18%,
+      rgba(187, 135, 250, 0.09),
+      transparent 40%
+    );
+  color: #f6f1ff;
+}
+
+/* Subtle editorial film-grain overlay */
+.dusk-noise {
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.35'/%3E%3C/svg%3E");
+  mix-blend-mode: overlay;
+}
+
+/* Editorial tight display typography */
+.display-tight {
+  letter-spacing: -0.05em;
+  line-height: 0.94;
+}
+
+.kicker {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--dusk-peach);
+}
+
+/* Smooth button lift */
+.btn-lift {
+  transition: transform 0.2s cubic-bezier(0.22, 1, 0.36, 1),
+    background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+.btn-lift:hover:not(:disabled) {
+  transform: translateY(-2px);
+}
+.btn-lift:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+/* Custom dark scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #09070f;
+}
+::-webkit-scrollbar-thumb {
+  background: #271e36;
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #ff7a3d;
 }
