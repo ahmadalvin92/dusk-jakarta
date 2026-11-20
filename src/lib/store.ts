@@ -169,16 +169,9 @@ export async function createTicketOrder(
     ? guest.instagramHandle.trim()
     : `@${guest.instagramHandle.trim()}`;
 
-  const qrPayload = JSON.stringify({
-    code: orderCode,
-    event: baseEvent.slug,
-    tier: tier.name,
-    pax: paxCount,
-    holder: guest.fullName.trim(),
-    ig: cleanHandle,
-    status: "pending",
-    v: 2,
-  });
+  const siteBase =
+    process.env.NEXT_PUBLIC_SITE_URL || "https://dusk-jakarta.vercel.app";
+  const qrPayload = `${siteBase}/ticket/${orderCode}`;
 
   const nowISO = new Date().toISOString();
 

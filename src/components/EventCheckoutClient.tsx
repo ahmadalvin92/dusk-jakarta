@@ -15,6 +15,7 @@ import {
   CreditCard,
   Loader2,
   MapPin,
+  MessageCircle,
   Minus,
   Plus,
   ShieldCheck,
@@ -53,7 +54,7 @@ export function EventCheckoutClient({
     followedDusk: false,
   });
 
-  // Upload Bukti Transfer
+  // Upload Bukti Transfer (Opsional - Utama dikirim via WhatsApp)
   const [proofFile, setProofFile] = useState<File | null>(null);
   const [proofPreview, setProofPreview] = useState<string | null>(null);
 
@@ -69,7 +70,7 @@ export function EventCheckoutClient({
   const maxQty = selectedTier ? Math.min(10, Math.max(1, selectedTier.stock)) : 1;
   const safeQty = Math.min(quantity, maxQty);
 
-  // MURNI HARGA TIKET * QUANTITY (TIDAK ADA BIAYA TAMBAHAN / TAX FEE RP 5.000)
+  // Murni harga tiket * qty (Tanpa biaya admin / tax)
   const subtotal = selectedTier ? selectedTier.priceIdr * safeQty : 0;
   const total = subtotal;
 
@@ -94,7 +95,7 @@ export function EventCheckoutClient({
     if (!file) return;
 
     if (file.size > 10 * 1024 * 1024) {
-      setErrorMsg("Ukuran file bukti transfer maksimal 10MB.");
+      setErrorMsg("Ukuran file maksimal 10MB.");
       return;
     }
 
@@ -132,37 +133,37 @@ export function EventCheckoutClient({
       return;
     }
 
-    if (!proofFile) {
-      setErrorMsg("Harap upload foto bukti transfer pembayaran sebelum melanjutkan.");
-      return;
-    }
-
     setSubmitting(true);
-    setUploadStatus("Mengunggah bukti transfer...");
+    setUploadStatus("Menyimpan pesanan tiket...");
 
     try {
-      // 1. Upload Bukti Transfer ke Supabase Storage / Endpoint
-      const formData = new FormData();
-      formData.append("file", proofFile);
-      formData.append("orderCode", `DSK-${Date.now()}`);
-
-      const uploadRes = await fetch("/api/upload-proof", {
-        method: "POST",
-        body: formData,
-      });
-
       let proofUrl = "";
-      if (uploadRes.ok) {
-        const uploadJson = await uploadRes.json();
-        proofUrl = uploadJson.url || "";
-      } else {
-        console.warn("Upload proof failed, proceeding with local fallback preview");
-        proofUrl = proofPreview || "";
+
+      // Jika user memilih file, coba upload ringkas (tapi tidak memblokir jika kosong)
+      if (proofFile) {
+        setUploadStatus("Mengunggah foto bukti...");
+        try {
+          const formData = new FormData();
+          formData.append("file", proofFile);
+          formData.append("orderCode", `DSK-${Date.now()}`);
+
+          const uploadRes = await fetch("/api/upload-proof", {
+            method: "POST",
+            body: formData,
+          });
+
+          if (uploadRes.ok) {
+            const uploadJson = await uploadRes.json();
+            proofUrl = uploadJson.url || "";
+          }
+        } catch {
+          // Fallback tanpa gagal
+        }
       }
 
-      setUploadStatus("Menyimpan pesanan ke database...");
+      setUploadStatus("Mendaftarkan ke database...");
 
-      // 2. Simpan order ke Supabase dengan status 'pending'
+      // Simpan order ke Supabase dengan status 'pending'
       const orderRes = await fetch("/api/orders", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -171,7 +172,7 @@ export function EventCheckoutClient({
           tierId: selectedTier.id,
           quantity: safeQty,
           paymentMethod: "MANUAL_TRANSFER",
-          paymentProofUrl: proofUrl,
+          paymentProofUrl: proofUrl || undefined,
           guest,
         }),
       });
@@ -181,7 +182,21 @@ export function EventCheckoutClient({
         throw new Error(orderData.error || "Gagal membuat pesanan.");
       }
 
-      // 3. Arahkan ke halaman Digital Pass / Status Tiket
+      // Buat pesan WhatsApp otomatis untuk panitia
+      const waMsg = `Halo Panitia DUSK JAKARTA, saya telah melakukan transfer sebesar ${formatIdr(
+        total
+      )} ke BCA Nathaniel Bennett untuk pesanan tiket ${event.title} (${
+        selectedTier.name
+      } - ${safeQty} tiket).\n\nOrder Code: ${orderData.order.orderCode}\nNama: ${
+        guest.fullName
+      }\nInstagram: ${guest.instagramHandle}\n\nBerikut foto bukti transfer saya:`;
+
+      const waUrl = buildWhatsappUrl(waMsg, SITE_CONFIG.whatsappNumber);
+
+      // Buka WA di tab baru untuk kirim foto struk langsung ke panitia
+      window.open(waUrl, "_blank");
+
+      // Arahkan ke halaman Digital Pass / Status Tiket
       router.push(`/ticket/${orderData.order.orderCode}`);
     } catch (err) {
       setErrorMsg(
@@ -431,10 +446,6 @@ export function EventCheckoutClient({
                   <span>Harga Tiket ({safeQty}x):</span>
                   <span>{formatIdr(subtotal)}</span>
                 </div>
-                <div className="flex justify-between text-emerald-400 font-semibold">
-                  <span>Biaya Tambahan / Tax:</span>
-                  <span>Rp 0 (FREE)</span>
-                </div>
                 <div className="flex justify-between border-t border-white/10 pt-2 text-base font-black text-white">
                   <span>Total Tagihan:</span>
                   <span className="text-[#ff7a3d]">{formatIdr(total)}</span>
@@ -593,19 +604,28 @@ export function EventCheckoutClient({
                 </div>
               </div>
 
-              {/* Upload Bukti Transfer */}
-              <div className="mt-4">
-                <label className="block text-[11px] font-bold uppercase tracking-wider text-white">
-                  Upload Foto Bukti Transfer *
-                </label>
-                <div className="mt-2">
-                  <label className="flex flex-col items-center justify-center rounded-xl border border-dashed border-white/25 bg-black/30 p-4 text-center cursor-pointer hover:border-[#ff7a3d] transition">
-                    <Upload className="h-6 w-6 text-[#ff9e68]" />
-                    <span className="mt-2 text-xs font-semibold text-white">
-                      {proofFile ? proofFile.name : "Klik untuk pilih foto struk / m-Banking"}
-                    </span>
-                    <span className="mt-1 text-[10px] text-zinc-400">
-                      Format JPG, PNG, WEBP (Maksimal 10MB)
+              {/* Kirim Bukti via WhatsApp Notice */}
+              <div className="mt-4 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3.5">
+                <div className="flex items-center gap-2 text-xs font-bold text-emerald-300 uppercase">
+                  <MessageCircle className="h-4 w-4" />
+                  Kirim Foto Struk via WhatsApp
+                </div>
+                <p className="mt-1 text-[11px] text-[#d2c5df] leading-relaxed">
+                  Setelah klik tombol di bawah, pesanan Anda akan langsung tercatat dan Anda akan otomatis terhubung ke WhatsApp Panitia (+62 815-8686-8200) untuk mengirimkan foto struk bukti transfer agar langsung di-Approve.
+                </p>
+              </div>
+
+              {/* Optional Upload Box */}
+              <div className="mt-3">
+                <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-zinc-400">
+                  <span>Lampirkan Foto Struk (Opsional)</span>
+                  <span className="text-zinc-500">Bisa langsung di WhatsApp</span>
+                </div>
+                <div className="mt-1.5">
+                  <label className="flex items-center justify-center gap-2 rounded-xl border border-dashed border-white/20 bg-black/30 p-2.5 text-center cursor-pointer hover:border-[#ff7a3d] transition text-xs text-white">
+                    <Upload className="h-4 w-4 text-[#ff9e68]" />
+                    <span className="truncate max-w-[200px]">
+                      {proofFile ? proofFile.name : "Pilih foto jika ingin dilampirkan di web"}
                     </span>
                     <input
                       type="file"
@@ -617,7 +637,7 @@ export function EventCheckoutClient({
                 </div>
 
                 {proofPreview && (
-                  <div className="mt-3 relative w-full h-32 rounded-xl overflow-hidden border border-white/20">
+                  <div className="mt-2 relative w-full h-24 rounded-lg overflow-hidden border border-white/20">
                     <Image
                       src={proofPreview}
                       alt="Preview Bukti Transfer"
@@ -652,17 +672,18 @@ export function EventCheckoutClient({
                 {submitting ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin" />
-                    Memproses Pembayaran...
+                    Menyimpan Pesanan...
                   </>
                 ) : (
                   <>
-                    Kirim Bukti &amp; Beli Tiket ({formatIdr(total)})
+                    <MessageCircle className="h-4 w-4" />
+                    Pesan Tiket &amp; Kirim Bukti via WA ({formatIdr(total)})
                     <ArrowUpRight className="h-4 w-4" />
                   </>
                 )}
               </button>
               <p className="mt-2 text-center text-[10px] text-zinc-400">
-                Pesanan akan diverifikasi oleh panitia DUSK JAKARTA (Approval 5-15 menit).
+                Pesanan diverifikasi oleh panitia DUSK JAKARTA via WhatsApp / Admin.
               </p>
             </div>
           </form>

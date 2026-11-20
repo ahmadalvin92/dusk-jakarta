@@ -3,15 +3,24 @@
 import React, { useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import QRCode from "qrcode";
 import {
+  Calendar,
   Check,
+  Clock,
+  Download,
   ExternalLink,
   Eye,
   EyeOff,
   Lock,
+  MapPin,
   MessageCircle,
+  Printer,
+  QrCode,
   RefreshCw,
   Search,
+  ShieldCheck,
+  Ticket,
   User,
   X,
 } from "lucide-react";
@@ -38,6 +47,18 @@ export default function AdminPage() {
   const [selectedProofUrl, setSelectedProofUrl] = useState<string | null>(null);
   const [updatingCode, setUpdatingCode] = useState<string | null>(null);
 
+  // Modal Cetak Tiket & QR Code
+  const [selectedPrintOrder, setSelectedPrintOrder] = useState<TicketOrder | null>(null);
+  const [modalQrDataUrl, setModalQrDataUrl] = useState<string>("");
+
+  // Scanner gate search code
+  const [scanInput, setScanInput] = useState<string>("");
+  const [scanResult, setScanResult] = useState<{
+    found: boolean;
+    order?: TicketOrder;
+    message: string;
+  } | null>(null);
+
   // Check saved token on mount
   useEffect(() => {
     const savedToken = localStorage.getItem("dusk_admin_token");
@@ -48,6 +69,29 @@ export default function AdminPage() {
       fetchOrders(savedToken);
     }
   }, []);
+
+  // Generate QR for modal when selectedPrintOrder changes
+  useEffect(() => {
+    if (selectedPrintOrder) {
+      const payload =
+        selectedPrintOrder.qrPayload && selectedPrintOrder.qrPayload.startsWith("http")
+          ? selectedPrintOrder.qrPayload
+          : `https://dusk-jakarta.vercel.app/ticket/${selectedPrintOrder.orderCode}`;
+
+      QRCode.toDataURL(payload, {
+        width: 360,
+        margin: 2,
+        color: {
+          dark: "#09070f",
+          light: "#ffffff",
+        },
+      })
+        .then((url) => setModalQrDataUrl(url))
+        .catch(() => {});
+    } else {
+      setModalQrDataUrl("");
+    }
+  }, [selectedPrintOrder]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -137,11 +181,64 @@ export default function AdminPage() {
               : o
           )
         );
+        if (selectedPrintOrder?.orderCode === orderCode) {
+          setSelectedPrintOrder((prev) =>
+            prev ? { ...prev, paymentStatus: newStatus } : null
+          );
+        }
       } else {
         alert("Gagal memperbarui status order.");
       }
     } finally {
       setUpdatingCode(null);
+    }
+  };
+
+  const handleDownloadQrPng = () => {
+    if (!modalQrDataUrl || !selectedPrintOrder) return;
+    const link = document.createElement("a");
+    link.href = modalQrDataUrl;
+    link.download = `${selectedPrintOrder.orderCode}-QR-PASS.png`;
+    link.click();
+  };
+
+  const handleScanGateCheck = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!scanInput.trim()) return;
+
+    // Bersihkan input (bisa URL atau kode murni)
+    const raw = scanInput.trim();
+    const cleanCode = raw.includes("/ticket/")
+      ? raw.split("/ticket/")[1]?.split("?")[0]?.toUpperCase()
+      : raw.toUpperCase();
+
+    const matched = orders.find((o) => o.orderCode.toUpperCase() === cleanCode);
+    if (!matched) {
+      setScanResult({
+        found: false,
+        message: `Tiket dengan kode "${cleanCode}" tidak ditemukan di database.`,
+      });
+      return;
+    }
+
+    if (matched.paymentStatus === "approved") {
+      setScanResult({
+        found: true,
+        order: matched,
+        message: `✅ TIKET VALID & APPROVED! Silakan persilakan tamu masuk.`,
+      });
+    } else if (matched.paymentStatus === "pending") {
+      setScanResult({
+        found: true,
+        order: matched,
+        message: `⚠️ PERHATIAN: Tiket masih berstatus PENDING (Belum diverifikasi transfer).`,
+      });
+    } else {
+      setScanResult({
+        found: true,
+        order: matched,
+        message: `❌ TIKET DITOLAK (REJECTED). Tamu tidak diizinkan masuk.`,
+      });
     }
   };
 
@@ -173,7 +270,7 @@ export default function AdminPage() {
     return true;
   });
 
-  // Login Screen (Username & Password)
+  // Login Screen
   if (!isAuthenticated) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center bg-[#09070f] px-4 py-12">
@@ -184,7 +281,7 @@ export default function AdminPage() {
               Panitia Admin Portal
             </h1>
             <p className="mt-1 text-xs text-[#b4a4c3]">
-              Login untuk verifikasi bukti transfer manual &amp; kelola tiket.
+              Login untuk verifikasi bukti transfer manual &amp; cetak tiket QR.
             </p>
           </div>
 
@@ -349,6 +446,83 @@ export default function AdminPage() {
           </div>
         </div>
 
+        {/* Gate Scanner / Fast QR Verification Tool */}
+        <div className="mt-8 rounded-2xl border border-[#ff7a3d]/30 bg-gradient-to-r from-[#170e24] via-[#120d1b] to-[#09070f] p-5">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-2 text-xs font-extrabold uppercase tracking-wider text-[#ff9e68]">
+                <QrCode className="h-4 w-4" />
+                Gate Check-In &amp; Scan Verifikasi Pintu Masuk
+              </div>
+              <p className="mt-1 text-xs text-[#b4a4c3]">
+                Scan QR Code tamu menggunakan scanner/kamera atau ketik Order Code untuk cek validitas langsung dari database.
+              </p>
+            </div>
+
+            <form onSubmit={handleScanGateCheck} className="flex items-center gap-2 w-full sm:w-auto">
+              <input
+                type="text"
+                value={scanInput}
+                onChange={(e) => setScanInput(e.target.value)}
+                placeholder="Scan / Ketik Order Code..."
+                className="w-full sm:w-64 rounded-xl border border-white/20 bg-black/60 px-3.5 py-2 font-mono text-xs text-white placeholder-zinc-500 outline-none focus:border-[#ff7a3d]"
+              />
+              <button
+                type="submit"
+                className="btn-lift rounded-xl bg-[#ff7a3d] px-4 py-2 text-xs font-black uppercase text-[#09070f] shrink-0"
+              >
+                Cek Tiket
+              </button>
+            </form>
+          </div>
+
+          {/* Scan Result Notice */}
+          {scanResult && (
+            <div
+              className={`mt-4 rounded-xl border p-4 text-xs ${
+                scanResult.found && scanResult.order?.paymentStatus === "approved"
+                  ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-200"
+                  : scanResult.found && scanResult.order?.paymentStatus === "pending"
+                  ? "border-amber-500/40 bg-amber-500/10 text-amber-200"
+                  : "border-rose-500/40 bg-rose-500/10 text-rose-200"
+              }`}
+            >
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <div>
+                  <div className="font-bold text-sm">{scanResult.message}</div>
+                  {scanResult.order && (
+                    <div className="mt-1 space-x-3 text-[11px] text-white/80">
+                      <span>
+                        Tamu: <strong>{scanResult.order.guest.fullName}</strong> (
+                        {scanResult.order.guest.instagramHandle})
+                      </span>
+                      <span>·</span>
+                      <span>
+                        Kategori: <strong>{scanResult.order.tierName}</strong> (
+                        {scanResult.order.quantity} Pax)
+                      </span>
+                      <span>·</span>
+                      <span>Kode: {scanResult.order.orderCode}</span>
+                    </div>
+                  )}
+                </div>
+
+                {scanResult.order && (
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedPrintOrder(scanResult.order!)}
+                      className="btn-lift inline-flex items-center gap-1.5 rounded-lg bg-white/10 px-3 py-1.5 text-xs font-bold text-white hover:bg-white/20"
+                    >
+                      <Printer className="h-3.5 w-3.5" /> Cetak Pass
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+
         {/* Filter & Search Bar */}
         <div className="mt-8 flex flex-col gap-4 rounded-2xl border border-white/10 bg-[#120d1b] p-4 sm:flex-row sm:items-center sm:justify-between">
           {/* Status Tabs */}
@@ -468,7 +642,7 @@ export default function AdminPage() {
                           className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold text-emerald-400 hover:bg-emerald-500/20"
                         >
                           <MessageCircle className="h-3 w-3" />
-                          {order.guest.whatsapp}
+                          Chat WhatsApp: {order.guest.whatsapp}
                         </a>
                         <span className="text-zinc-400">
                           {order.guest.email}
@@ -495,25 +669,32 @@ export default function AdminPage() {
                       </div>
                     </div>
 
-                    {/* Right: Payment Proof & Actions */}
-                    <div className="flex flex-wrap items-center gap-4">
-                      {order.paymentProofUrl ? (
+                    {/* Right: Actions (Cetak Tiket, Download QR, Bukti Struk, Approve/Reject) */}
+                    <div className="flex flex-wrap items-center gap-2.5">
+                      {/* Tombol Cetak Tiket & QR */}
+                      <button
+                        type="button"
+                        onClick={() => setSelectedPrintOrder(order)}
+                        className="btn-lift inline-flex items-center gap-1.5 rounded-xl border border-white/20 bg-white/[0.05] px-3 py-2 text-xs font-semibold text-white hover:border-[#ff7a3d]"
+                      >
+                        <Printer className="h-3.5 w-3.5 text-[#ff9e68]" />
+                        Cetak Tiket &amp; QR
+                      </button>
+
+                      {/* Bukti Struk (jika ada file di web) */}
+                      {order.paymentProofUrl && (
                         <button
                           type="button"
                           onClick={() => setSelectedProofUrl(order.paymentProofUrl!)}
                           className="btn-lift inline-flex items-center gap-1.5 rounded-xl border border-white/20 bg-black/40 px-3 py-2 text-xs font-semibold text-white hover:border-[#ff9e68]"
                         >
                           <Eye className="h-3.5 w-3.5 text-[#ff9e68]" />
-                          Lihat Bukti Struk
+                          Foto Struk Web
                         </button>
-                      ) : (
-                        <span className="text-xs text-zinc-500">
-                          Tidak ada file struk
-                        </span>
                       )}
 
                       {/* Approve / Reject Buttons */}
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1.5">
                         {order.paymentStatus !== "approved" && (
                           <button
                             type="button"
@@ -550,6 +731,164 @@ export default function AdminPage() {
           )}
         </div>
       </main>
+
+      {/* MODAL CETAK TIKET & QR CODE (SIAP PRINT / PDF / DOWNLOAD) */}
+      {selectedPrintOrder && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4 backdrop-blur-md overflow-y-auto"
+          onClick={() => setSelectedPrintOrder(null)}
+        >
+          <div
+            className="relative w-full max-w-lg rounded-3xl border border-white/20 bg-[#120d1b] p-6 shadow-2xl overflow-hidden my-8"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Top Modal Controls */}
+            <div className="flex items-center justify-between pb-4 border-b border-white/10">
+              <div className="flex items-center gap-2">
+                <Ticket className="h-4 w-4 text-[#ff9e68]" />
+                <h3 className="text-sm font-black uppercase text-white">
+                  Cetak E-Ticket &amp; QR Pass Panitia
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedPrintOrder(null)}
+                className="rounded-full bg-white/10 p-1.5 text-white hover:bg-white/20"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Printable Ticket Pass Body */}
+            <div className="mt-4 rounded-2xl border border-white/15 bg-[#09070f] p-5 text-white">
+              <div className="flex items-center justify-between border-b border-white/10 pb-3">
+                <DuskLogo size="sm" />
+                <span
+                  className={`rounded-full px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider ${
+                    selectedPrintOrder.paymentStatus === "approved"
+                      ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
+                      : "bg-amber-500/20 text-amber-300 border border-amber-500/40"
+                  }`}
+                >
+                  {selectedPrintOrder.paymentStatus === "approved"
+                    ? "OFFICIAL TICKET · LUNAS"
+                    : "STATUS: PENDING"}
+                </span>
+              </div>
+
+              <div className="mt-4">
+                <p className="kicker text-[10px]">EVENT E-TICKET PASS</p>
+                <h2 className="text-2xl font-black uppercase text-white">
+                  {selectedPrintOrder.eventTitle}
+                </h2>
+                <div className="mt-2 space-y-1 text-xs text-[#b4a4c3]">
+                  <div className="flex items-center gap-2">
+                    <Calendar className="h-3.5 w-3.5 text-[#ff9e68]" />
+                    <span>{selectedPrintOrder.eventDateLabel} · Doors Open 21:30 WIB</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <MapPin className="h-3.5 w-3.5 text-[#ff9e68]" />
+                    <span>{selectedPrintOrder.venue} ({selectedPrintOrder.venueAddress})</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Clock className="h-3.5 w-3.5 text-[#ff9e68]" />
+                    <span>Max Entry: {selectedPrintOrder.maxEntryTime}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* QR Code and Guest Info */}
+              <div className="mt-5 flex flex-col sm:flex-row items-center gap-5 border-t border-dashed border-white/20 pt-5">
+                <div className="flex flex-col items-center rounded-xl bg-white p-3 shadow shrink-0">
+                  {modalQrDataUrl ? (
+                    <Image
+                      src={modalQrDataUrl}
+                      alt="Ticket QR Code"
+                      width={160}
+                      height={160}
+                      className="h-36 w-36 object-contain"
+                      priority
+                    />
+                  ) : (
+                    <div className="h-36 w-36 flex items-center justify-center text-xs text-black">
+                      Generating QR...
+                    </div>
+                  )}
+                  <span className="mt-1 font-mono text-[9px] font-black uppercase tracking-wider text-black">
+                    {selectedPrintOrder.orderCode}
+                  </span>
+                </div>
+
+                <div className="flex-1 space-y-2 text-xs">
+                  <div>
+                    <span className="text-[10px] uppercase text-zinc-400">Pemegang Tiket:</span>
+                    <div className="font-bold text-white text-sm">
+                      {selectedPrintOrder.guest.fullName}
+                    </div>
+                    <div className="text-[#ff9e68] font-mono">
+                      {selectedPrintOrder.guest.instagramHandle}
+                    </div>
+                  </div>
+
+                  <div>
+                    <span className="text-[10px] uppercase text-zinc-400">Kategori Tiket:</span>
+                    <div className="font-extrabold text-white">
+                      {selectedPrintOrder.tierName} ({selectedPrintOrder.quantity} Pax)
+                    </div>
+                  </div>
+
+                  <div>
+                    <span className="text-[10px] uppercase text-zinc-400">Total Pembayaran:</span>
+                    <div className="font-black text-emerald-400 text-sm">
+                      {formatIdr(selectedPrintOrder.totalIdr)}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Action Buttons for Print / Download QR */}
+            <div className="mt-5 flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-white/10">
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => window.print()}
+                  className="btn-lift inline-flex items-center gap-1.5 rounded-full bg-[#ff7a3d] px-4 py-2.5 text-xs font-black uppercase text-[#09070f] hover:bg-[#ff945f]"
+                >
+                  <Printer className="h-3.5 w-3.5" />
+                  Print Tiket (PDF)
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleDownloadQrPng}
+                  className="btn-lift inline-flex items-center gap-1.5 rounded-full border border-white/20 bg-white/5 px-4 py-2.5 text-xs font-bold text-white hover:border-[#ff9e68]"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  Download QR PNG
+                </button>
+              </div>
+
+              <a
+                href={`https://wa.me/${selectedPrintOrder.guest.whatsapp.replace(
+                  /\D/g,
+                  ""
+                )}?text=Halo%20${encodeURIComponent(
+                  selectedPrintOrder.guest.fullName
+                )},%20E-Ticket%20DUSK%20JAKARTA%20kamu%20sudah%20aktif%20dan%20terverifikasi!%20Link%20Digital%20Pass%20%26%20QR%20Code:%20https://dusk-jakarta.vercel.app/ticket/${
+                  selectedPrintOrder.orderCode
+                }`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="btn-lift inline-flex items-center gap-1.5 rounded-full bg-emerald-500 px-4 py-2.5 text-xs font-bold text-[#09070f] hover:bg-emerald-400"
+              >
+                <MessageCircle className="h-3.5 w-3.5" />
+                Kirim Tiket ke WA
+              </a>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Lightbox Modal for Payment Proof */}
       {selectedProofUrl && (
