@@ -145,3 +145,11 @@ CREATE POLICY "Public update payment proofs"
 ON storage.objects FOR UPDATE
 TO public
 USING (bucket_id = 'payment-proofs');
+
+-- ==============================================================================
+-- 6. RECYCLE BIN SUPPORT (SOFT DELETE & RECOVER)
+-- ==============================================================================
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN DEFAULT FALSE;
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+CREATE INDEX IF NOT EXISTS idx_orders_is_deleted ON public.orders(is_deleted);
+

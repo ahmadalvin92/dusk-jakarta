@@ -61,7 +61,7 @@ export function DigitalPassClient({ order: initialOrder }: DigitalPassClientProp
 
   // Generate QR Code if approved
   useEffect(() => {
-    if (order.paymentStatus === "approved") {
+    if (order.paymentStatus === "approved" && !order.isDeleted) {
       QRCode.toDataURL(order.qrPayload, {
         width: 320,
         margin: 2,
@@ -73,7 +73,7 @@ export function DigitalPassClient({ order: initialOrder }: DigitalPassClientProp
         .then((url) => setQrDataUrl(url))
         .catch(() => {});
     }
-  }, [order.paymentStatus, order.qrPayload]);
+  }, [order.paymentStatus, order.isDeleted, order.qrPayload]);
 
   const handleManualRefresh = async () => {
     setIsRefreshing(true);
@@ -155,7 +155,7 @@ export function DigitalPassClient({ order: initialOrder }: DigitalPassClientProp
             )}
           </button>
 
-          {order.paymentStatus === "approved" && (
+          {order.paymentStatus === "approved" && !order.isDeleted && (
             <button
               type="button"
               onClick={() => window.print()}
@@ -169,7 +169,21 @@ export function DigitalPassClient({ order: initialOrder }: DigitalPassClientProp
       </div>
 
       {/* Status Notice Banner */}
-      {order.paymentStatus === "pending" && (
+      {order.isDeleted ? (
+        <div className="mb-6 rounded-2xl border border-rose-500/50 bg-rose-950/40 p-5 print:hidden">
+          <div className="flex items-start gap-3.5">
+            <ShieldAlert className="h-5 w-5 text-rose-400 shrink-0 mt-0.5" />
+            <div>
+              <h4 className="text-sm font-black uppercase text-rose-300">
+                Tiket Telah Dihapus / Dinonaktifkan (Recycle Bin)
+              </h4>
+              <p className="mt-1 text-xs text-rose-200 leading-relaxed">
+                Tiket dengan nomor order <strong className="font-mono text-white">{order.orderCode}</strong> telah dinonaktifkan oleh panitia dan tidak dapat digunakan untuk memasuki venue.
+              </p>
+            </div>
+          </div>
+        </div>
+      ) : order.paymentStatus === "pending" ? (
         <div className="mb-6 rounded-2xl border border-amber-400/35 bg-gradient-to-r from-amber-500/15 via-[#1a1309] to-[#120d1b] p-5 print:hidden">
           <div className="flex items-start gap-3.5">
             <Hourglass className="h-5 w-5 text-amber-400 shrink-0 mt-0.5 animate-pulse" />
@@ -194,7 +208,7 @@ export function DigitalPassClient({ order: initialOrder }: DigitalPassClientProp
             </div>
           </div>
         </div>
-      )}
+      ) : null}
 
       {order.paymentStatus === "rejected" && (
         <div className="mb-6 rounded-2xl border border-rose-500/40 bg-rose-500/10 p-5 print:hidden">
@@ -229,7 +243,12 @@ export function DigitalPassClient({ order: initialOrder }: DigitalPassClientProp
         <div className="flex items-center justify-between border-b border-white/10 bg-gradient-to-r from-[#ff7a3d]/20 via-[#1a1126] to-[#120d1b] px-6 py-5">
           <DuskLogo size="sm" />
 
-          {order.paymentStatus === "approved" ? (
+          {order.isDeleted ? (
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-rose-500/40 bg-rose-500/20 px-3 py-1 text-[10px] font-extrabold uppercase tracking-[0.18em] text-rose-300">
+              <ShieldAlert className="h-3.5 w-3.5" />
+              NONAKTIF / RECYCLED
+            </span>
+          ) : order.paymentStatus === "approved" ? (
             <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-400/40 bg-emerald-400/15 px-3 py-1 text-[10px] font-extrabold uppercase tracking-[0.18em] text-emerald-300">
               <ShieldCheck className="h-3.5 w-3.5" />
               Verified Pass · APPROVED
@@ -290,7 +309,17 @@ export function DigitalPassClient({ order: initialOrder }: DigitalPassClientProp
           {/* QR Code / Pending Display */}
           <div className="flex flex-col items-center gap-6 sm:flex-row sm:items-stretch">
             <div className="flex flex-col items-center justify-center rounded-2xl bg-white p-3.5 shadow-lg shrink-0 min-h-[220px] min-w-[200px]">
-              {order.paymentStatus === "approved" ? (
+              {order.isDeleted ? (
+                <div className="flex h-44 w-44 flex-col items-center justify-center text-center p-3">
+                  <ShieldAlert className="h-10 w-10 text-rose-500 mb-2" />
+                  <span className="text-xs font-black text-rose-600 uppercase">
+                    Pass Dihapus
+                  </span>
+                  <span className="mt-1 text-[10px] text-zinc-600 leading-snug">
+                    Tiket berada di Recycle Bin &amp; tidak berlaku
+                  </span>
+                </div>
+              ) : order.paymentStatus === "approved" ? (
                 qrDataUrl ? (
                   <>
                     <Image

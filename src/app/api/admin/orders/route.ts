@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getAllOrders, updateOrderStatus } from "@/lib/store";
+import { getAllOrders, updateOrderStatus, softDeleteOrder, restoreOrder } from "@/lib/store";
 import { OrderPaymentStatus } from "@/types/event";
 
 function verifyAdmin(request: Request): boolean {
@@ -45,12 +45,36 @@ export async function PATCH(request: Request) {
   try {
     const body = (await request.json()) as {
       orderCode: string;
-      status: OrderPaymentStatus;
+      action?: "delete" | "restore" | "recover" | "update_status";
+      status?: OrderPaymentStatus;
       adminNotes?: string;
     };
 
-    if (!body.orderCode || !body.status) {
-      return NextResponse.json({ error: "orderCode and status are required" }, { status: 400 });
+    if (!body.orderCode) {
+      return NextResponse.json({ error: "orderCode is required" }, { status: 400 });
+    }
+
+    // Soft delete to Recycle Bin
+    if (body.action === "delete") {
+      const result = await softDeleteOrder(body.orderCode);
+      if (!result.ok) {
+        return NextResponse.json({ error: result.error || "Gagal memindahkan ke Recycle Bin" }, { status: 400 });
+      }
+      return NextResponse.json({ ok: true, order: result.order });
+    }
+
+    // Restore from Recycle Bin
+    if (body.action === "restore" || body.action === "recover") {
+      const result = await restoreOrder(body.orderCode);
+      if (!result.ok) {
+        return NextResponse.json({ error: result.error || "Gagal memulihkan pesanan" }, { status: 400 });
+      }
+      return NextResponse.json({ ok: true, order: result.order });
+    }
+
+    // Update Status
+    if (!body.status) {
+      return NextResponse.json({ error: "status is required" }, { status: 400 });
     }
 
     const result = await updateOrderStatus(body.orderCode, body.status, body.adminNotes);
@@ -61,6 +85,30 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ ok: true, order: result.order });
   } catch (err) {
     console.error("Error updating order:", err);
+    return NextResponse.json({ error: "Server error" }, { status: 500 });
+  }
+}
+
+export async function DELETE(request: Request) {
+  if (!verifyAdmin(request)) {
+    return NextResponse.json({ error: "Unauthorized: Silakan login terlebih dahulu." }, { status: 401 });
+  }
+
+  try {
+    const { searchParams } = new URL(request.url);
+    const orderCode = searchParams.get("orderCode");
+    if (!orderCode) {
+      return NextResponse.json({ error: "orderCode is required" }, { status: 400 });
+    }
+
+    const result = await softDeleteOrder(orderCode);
+    if (!result.ok) {
+      return NextResponse.json({ error: result.error || "Gagal menghapus pesanan" }, { status: 400 });
+    }
+
+    return NextResponse.json({ ok: true, order: result.order });
+  } catch (err) {
+    console.error("Error deleting order:", err);
     return NextResponse.json({ error: "Server error" }, { status: 500 });
   }
 }

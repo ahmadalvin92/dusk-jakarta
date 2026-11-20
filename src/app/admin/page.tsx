@@ -5,6 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 import QRCode from "qrcode";
 import {
+  AlertTriangle,
   Calendar,
   Check,
   Clock,
@@ -18,15 +19,18 @@ import {
   Printer,
   QrCode,
   RefreshCw,
+  RotateCcw,
   Search,
   ShieldCheck,
   Ticket,
+  Trash2,
   User,
   X,
 } from "lucide-react";
 import { TicketOrder, OrderPaymentStatus } from "@/types/event";
 import { formatIdr } from "@/data/events";
 import { DuskLogo } from "@/components/DuskLogo";
+import { cleanWhatsappPhone } from "@/data/site";
 
 export default function AdminPage() {
   const [username, setUsername] = useState<string>("benji");
@@ -40,7 +44,9 @@ export default function AdminPage() {
 
   const [orders, setOrders] = useState<TicketOrder[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
-  const [statusFilter, setStatusFilter] = useState<"all" | OrderPaymentStatus>("all");
+  const [statusFilter, setStatusFilter] = useState<
+    "all" | OrderPaymentStatus | "recycle_bin"
+  >("all");
   const [searchQuery, setSearchQuery] = useState<string>("");
 
   // Lightbox view for Bukti Transfer
@@ -221,6 +227,15 @@ export default function AdminPage() {
       return;
     }
 
+    if (matched.isDeleted) {
+      setScanResult({
+        found: true,
+        order: matched,
+        message: `❌ TIKET INI BERADA DI RECYCLE BIN (DIHAPUS). Tiket telah dinonaktifkan oleh panitia dan TIDAK DAPAT digunakan untuk masuk!`,
+      });
+      return;
+    }
+
     if (matched.paymentStatus === "approved") {
       setScanResult({
         found: true,
@@ -242,6 +257,88 @@ export default function AdminPage() {
     }
   };
 
+  const handleDeleteOrder = async (orderCode: string, guestName: string) => {
+    const confirmDelete = window.confirm(
+      `Pindahkan pesanan ${orderCode} atas nama "${guestName}" ke Recycle Bin?\n\nTiket yang berada di Recycle Bin TIDAK BISA DI-SCAN di gate sampai dipulihkan kembali.`
+    );
+    if (!confirmDelete) return;
+
+    setUpdatingCode(orderCode);
+    try {
+      const res = await fetch("/api/admin/orders", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          "x-admin-token": authToken,
+        },
+        body: JSON.stringify({
+          orderCode,
+          action: "delete",
+        }),
+      });
+
+      if (res.ok) {
+        const nowISO = new Date().toISOString();
+        setOrders((prev) =>
+          prev.map((o) =>
+            o.orderCode === orderCode
+              ? { ...o, isDeleted: true, deletedAt: nowISO }
+              : o
+          )
+        );
+        if (selectedPrintOrder?.orderCode === orderCode) {
+          setSelectedPrintOrder((prev) =>
+            prev ? { ...prev, isDeleted: true, deletedAt: nowISO } : null
+          );
+        }
+      } else {
+        alert("Gagal memindahkan pesanan ke Recycle Bin.");
+      }
+    } catch {
+      alert("Terjadi kendala koneksi.");
+    } finally {
+      setUpdatingCode(null);
+    }
+  };
+
+  const handleRestoreOrder = async (orderCode: string) => {
+    setUpdatingCode(orderCode);
+    try {
+      const res = await fetch("/api/admin/orders", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          "x-admin-token": authToken,
+        },
+        body: JSON.stringify({
+          orderCode,
+          action: "restore",
+        }),
+      });
+
+      if (res.ok) {
+        setOrders((prev) =>
+          prev.map((o) =>
+            o.orderCode === orderCode
+              ? { ...o, isDeleted: false, deletedAt: undefined }
+              : o
+          )
+        );
+        if (selectedPrintOrder?.orderCode === orderCode) {
+          setSelectedPrintOrder((prev) =>
+            prev ? { ...prev, isDeleted: false, deletedAt: undefined } : null
+          );
+        }
+      } else {
+        alert("Gagal memulihkan pesanan dari Recycle Bin.");
+      }
+    } catch {
+      alert("Terjadi kendala koneksi.");
+    } finally {
+      setUpdatingCode(null);
+    }
+  };
+
   const handleLogout = () => {
     localStorage.removeItem("dusk_admin_token");
     localStorage.removeItem("dusk_admin_user");
@@ -251,14 +348,27 @@ export default function AdminPage() {
   };
 
   // Stats
-  const totalRevenue = orders
+  const activeOrders = orders.filter((o) => !o.isDeleted);
+  const deletedOrders = orders.filter((o) => Boolean(o.isDeleted));
+
+  const totalRevenue = activeOrders
     .filter((o) => o.paymentStatus === "approved")
     .reduce((sum, o) => sum + (o.totalIdr || 0), 0);
-  const pendingCount = orders.filter((o) => o.paymentStatus === "pending").length;
-  const approvedCount = orders.filter((o) => o.paymentStatus === "approved").length;
+  const pendingCount = activeOrders.filter((o) => o.paymentStatus === "pending").length;
+  const approvedCount = activeOrders.filter((o) => o.paymentStatus === "approved").length;
+  const rejectedCount = activeOrders.filter((o) => o.paymentStatus === "rejected").length;
+  const deletedCount = deletedOrders.length;
 
-  const filteredOrders = orders.filter((o) => {
-    if (statusFilter !== "all" && o.paymentStatus !== statusFilter) return false;
+  const targetList = statusFilter === "recycle_bin" ? deletedOrders : activeOrders;
+
+  const filteredOrders = targetList.filter((o) => {
+    if (
+      statusFilter !== "all" &&
+      statusFilter !== "recycle_bin" &&
+      o.paymentStatus !== statusFilter
+    ) {
+      return false;
+    }
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       const matchName = o.guest.fullName.toLowerCase().includes(q);
@@ -405,10 +515,10 @@ export default function AdminPage() {
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <div className="rounded-2xl border border-white/10 bg-[#120d1b] p-5">
             <div className="text-xs font-semibold text-[#b4a4c3]">
-              Total Pesanan
+              Total Pesanan Aktif
             </div>
             <div className="mt-2 text-3xl font-black text-white">
-              {orders.length}
+              {activeOrders.length}
             </div>
           </div>
 
@@ -526,18 +636,14 @@ export default function AdminPage() {
         {/* Filter & Search Bar */}
         <div className="mt-8 flex flex-col gap-4 rounded-2xl border border-white/10 bg-[#120d1b] p-4 sm:flex-row sm:items-center sm:justify-between">
           {/* Status Tabs */}
-          <div className="inline-flex rounded-full border border-white/15 bg-black/40 p-1 self-start">
+          <div className="inline-flex flex-wrap rounded-full border border-white/15 bg-black/40 p-1 self-start gap-1">
             {(
               [
-                { id: "all", label: `Semua (${orders.length})` },
+                { id: "all", label: `Semua Aktif (${activeOrders.length})` },
                 { id: "pending", label: `Pending (${pendingCount})` },
                 { id: "approved", label: `Approved (${approvedCount})` },
-                {
-                  id: "rejected",
-                  label: `Rejected (${
-                    orders.filter((o) => o.paymentStatus === "rejected").length
-                  })`,
-                },
+                { id: "rejected", label: `Rejected (${rejectedCount})` },
+                { id: "recycle_bin", label: `🗑️ Recycle Bin (${deletedCount})` },
               ] as const
             ).map((tab) => (
               <button
@@ -546,7 +652,9 @@ export default function AdminPage() {
                 onClick={() => setStatusFilter(tab.id)}
                 className={`rounded-full px-3.5 py-1.5 text-xs font-bold transition ${
                   statusFilter === tab.id
-                    ? "bg-[#ff7a3d] text-[#09070f]"
+                    ? tab.id === "recycle_bin"
+                      ? "bg-rose-500 text-white"
+                      : "bg-[#ff7a3d] text-[#09070f]"
                     : "text-[#b4a4c3] hover:text-white"
                 }`}
               >
@@ -577,9 +685,8 @@ export default function AdminPage() {
           ) : (
             filteredOrders.map((order) => {
               const isUpdating = updatingCode === order.orderCode;
-              const waLink = `https://wa.me/${order.guest.whatsapp.replace(
-                /\D/g,
-                ""
+              const waLink = `https://wa.me/${cleanWhatsappPhone(
+                order.guest.whatsapp
               )}?text=Halo%20${encodeURIComponent(
                 order.guest.fullName
               )},%20kami%20dari%20panitia%20DUSK%20JAKARTA%20mengenai%20pesanan%20tiket%20${
@@ -590,7 +697,9 @@ export default function AdminPage() {
                 <div
                   key={order.orderCode}
                   className={`rounded-2xl border p-5 transition ${
-                    order.paymentStatus === "pending"
+                    order.isDeleted
+                      ? "border-rose-500/40 bg-rose-950/20"
+                      : order.paymentStatus === "pending"
                       ? "border-amber-400/30 bg-amber-500/[0.03]"
                       : order.paymentStatus === "approved"
                       ? "border-emerald-500/20 bg-[#120d1b]"
@@ -604,17 +713,23 @@ export default function AdminPage() {
                         <span className="font-mono text-sm font-black text-[#ff9e68]">
                           {order.orderCode}
                         </span>
-                        <span
-                          className={`rounded-full px-2.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wider ${
-                            order.paymentStatus === "approved"
-                              ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
-                              : order.paymentStatus === "rejected"
-                              ? "bg-rose-500/20 text-rose-300 border border-rose-500/30"
-                              : "bg-amber-500/20 text-amber-300 border border-amber-500/30 animate-pulse"
-                          }`}
-                        >
-                          {order.paymentStatus}
-                        </span>
+                        {order.isDeleted ? (
+                          <span className="rounded-full px-2.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wider bg-rose-500/30 text-rose-300 border border-rose-500/40">
+                            DIHAPUS / RECYCLE BIN
+                          </span>
+                        ) : (
+                          <span
+                            className={`rounded-full px-2.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wider ${
+                              order.paymentStatus === "approved"
+                                ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
+                                : order.paymentStatus === "rejected"
+                                ? "bg-rose-500/20 text-rose-300 border border-rose-500/30"
+                                : "bg-amber-500/20 text-amber-300 border border-amber-500/30 animate-pulse"
+                            }`}
+                          >
+                            {order.paymentStatus}
+                          </span>
+                        )}
                         <span className="text-[11px] text-zinc-500">
                           {new Date(order.createdAt).toLocaleString("id-ID")}
                         </span>
@@ -669,17 +784,29 @@ export default function AdminPage() {
                       </div>
                     </div>
 
-                    {/* Right: Actions (Cetak Tiket, Download QR, Bukti Struk, Approve/Reject) */}
+                    {/* Right: Actions */}
                     <div className="flex flex-wrap items-center gap-2.5">
-                      {/* Tombol Cetak Tiket & QR */}
-                      <button
-                        type="button"
-                        onClick={() => setSelectedPrintOrder(order)}
-                        className="btn-lift inline-flex items-center gap-1.5 rounded-xl border border-white/20 bg-white/[0.05] px-3 py-2 text-xs font-semibold text-white hover:border-[#ff7a3d]"
-                      >
-                        <Printer className="h-3.5 w-3.5 text-[#ff9e68]" />
-                        Cetak Tiket &amp; QR
-                      </button>
+                      {order.isDeleted ? (
+                        <button
+                          type="button"
+                          disabled={isUpdating}
+                          onClick={() => handleRestoreOrder(order.orderCode)}
+                          className="btn-lift inline-flex items-center gap-1.5 rounded-full bg-emerald-500 px-4 py-2 text-xs font-black uppercase text-[#09070f] hover:bg-emerald-400 disabled:opacity-40"
+                        >
+                          <RotateCcw className="h-3.5 w-3.5" />
+                          Pulihkan Tiket (Restore)
+                        </button>
+                      ) : (
+                        <>
+                          {/* Tombol Cetak Tiket & QR */}
+                          <button
+                            type="button"
+                            onClick={() => setSelectedPrintOrder(order)}
+                            className="btn-lift inline-flex items-center gap-1.5 rounded-xl border border-white/20 bg-white/[0.05] px-3 py-2 text-xs font-semibold text-white hover:border-[#ff7a3d]"
+                          >
+                            <Printer className="h-3.5 w-3.5 text-[#ff9e68]" />
+                            Cetak Tiket &amp; QR
+                          </button>
 
                       {/* Bukti Struk (jika ada file di web) */}
                       {order.paymentProofUrl && (
@@ -722,8 +849,23 @@ export default function AdminPage() {
                             Reject
                           </button>
                         )}
+
+                        {/* Tombol Pindahkan ke Recycle Bin */}
+                        <button
+                          type="button"
+                          disabled={isUpdating}
+                          onClick={() =>
+                            handleDeleteOrder(order.orderCode, order.guest.fullName)
+                          }
+                          title="Pindahkan ke Recycle Bin (Hapus)"
+                          className="rounded-full border border-zinc-700 bg-zinc-800/80 p-2 text-zinc-400 hover:text-rose-400 hover:border-rose-500/50 hover:bg-rose-500/10 transition disabled:opacity-40"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
                       </div>
-                    </div>
+                    </>
+                  )}
+                </div>
                   </div>
                 </div>
               );
@@ -765,12 +907,16 @@ export default function AdminPage() {
                 <DuskLogo size="sm" />
                 <span
                   className={`rounded-full px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider ${
-                    selectedPrintOrder.paymentStatus === "approved"
+                    selectedPrintOrder.isDeleted
+                      ? "bg-rose-500/30 text-rose-300 border border-rose-500/50"
+                      : selectedPrintOrder.paymentStatus === "approved"
                       ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
                       : "bg-amber-500/20 text-amber-300 border border-amber-500/40"
                   }`}
                 >
-                  {selectedPrintOrder.paymentStatus === "approved"
+                  {selectedPrintOrder.isDeleted
+                    ? "TIKET DIHAPUS (RECYCLE BIN)"
+                    : selectedPrintOrder.paymentStatus === "approved"
                     ? "OFFICIAL TICKET · LUNAS"
                     : "STATUS: PENDING"}
                 </span>
@@ -870,9 +1016,8 @@ export default function AdminPage() {
               </div>
 
               <a
-                href={`https://wa.me/${selectedPrintOrder.guest.whatsapp.replace(
-                  /\D/g,
-                  ""
+                href={`https://wa.me/${cleanWhatsappPhone(
+                  selectedPrintOrder.guest.whatsapp
                 )}?text=Halo%20${encodeURIComponent(
                   selectedPrintOrder.guest.fullName
                 )},%20E-Ticket%20DUSK%20JAKARTA%20kamu%20sudah%20aktif%20dan%20terverifikasi!%20Link%20Digital%20Pass%20%26%20QR%20Code:%20https://dusk-jakarta.vercel.app/ticket/${

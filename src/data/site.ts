@@ -69,11 +69,19 @@ export const SITE_CONFIG = {
   ],
 };
 
+export function cleanWhatsappPhone(raw: string): string {
+  let cleaned = (raw || "").replace(/\D/g, "");
+  if (cleaned.startsWith("0")) {
+    cleaned = "62" + cleaned.slice(1);
+  } else if (cleaned.startsWith("8")) {
+    cleaned = "62" + cleaned;
+  }
+  return cleaned || "6281586868200";
+}
+
 export function buildWhatsappUrl(message: string, customPhone?: string): string {
-  const phone = customPhone || SITE_CONFIG.whatsappNumber;
-  return `https://api.whatsapp.com/send/?phone=${phone}&text=${encodeURIComponent(
-    message
-  )}&type=phone_number&app_absent=0`;
+  const phone = cleanWhatsappPhone(customPhone || SITE_CONFIG.whatsappNumber);
+  return `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
 }
 
 export function buildTableRsvpUrl(eventTitle = "TILL FURTHER NOTICE", venue = "Zeek Jakarta"): string {

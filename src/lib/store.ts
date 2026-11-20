@@ -108,6 +108,10 @@ function mapSupabaseRowToOrder(row: any): TicketOrder {
       followedDusk: true,
     },
     qrPayload: row.qr_payload,
+    isDeleted:
+      Boolean(row.is_deleted) ||
+      (typeof row.admin_notes === "string" && row.admin_notes.includes("[DELETED]")),
+    deletedAt: row.deleted_at || undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -337,6 +341,151 @@ export async function updateOrderStatus(
 
   localOrder.paymentStatus = newStatus;
   if (adminNotes !== undefined) localOrder.adminNotes = adminNotes;
+  localOrder.updatedAt = nowISO;
+  state.orders[cleanCode] = localOrder;
+  saveLocalStore(state);
+
+  return { ok: true, order: localOrder };
+}
+
+export async function softDeleteOrder(
+  orderCode: string
+): Promise<{ ok: boolean; order?: TicketOrder; error?: string }> {
+  const cleanCode = orderCode.trim().toUpperCase();
+  const nowISO = new Date().toISOString();
+
+  // Try Supabase first
+  try {
+    const { data: existing } = await supabase
+      .from("orders")
+      .select("admin_notes")
+      .eq("order_code", cleanCode)
+      .maybeSingle();
+
+    const oldNotes = existing?.admin_notes || "";
+    const newNotes = oldNotes.includes("[DELETED]")
+      ? oldNotes
+      : `[DELETED] ${oldNotes}`.trim();
+
+    let { data, error } = await supabase
+      .from("orders")
+      .update({
+        is_deleted: true,
+        deleted_at: nowISO,
+        admin_notes: newNotes,
+        updated_at: nowISO,
+      })
+      .eq("order_code", cleanCode)
+      .select()
+      .maybeSingle();
+
+    if (error && error.message?.includes("is_deleted")) {
+      const fallbackRes = await supabase
+        .from("orders")
+        .update({
+          admin_notes: newNotes,
+          updated_at: nowISO,
+        })
+        .eq("order_code", cleanCode)
+        .select()
+        .maybeSingle();
+      data = fallbackRes.data;
+      error = fallbackRes.error;
+    }
+
+    if (!error && data) {
+      const updated = mapSupabaseRowToOrder(data);
+      const state = loadLocalStore();
+      state.orders[cleanCode] = updated;
+      saveLocalStore(state);
+      return { ok: true, order: updated };
+    }
+  } catch {
+    // Continue to local
+  }
+
+  // Local fallback
+  const state = loadLocalStore();
+  const localOrder = state.orders[cleanCode];
+  if (!localOrder) {
+    return { ok: false, error: "Pesanan tidak ditemukan" };
+  }
+
+  localOrder.isDeleted = true;
+  localOrder.deletedAt = nowISO;
+  localOrder.adminNotes = `[DELETED] ${localOrder.adminNotes || ""}`.trim();
+  localOrder.updatedAt = nowISO;
+  state.orders[cleanCode] = localOrder;
+  saveLocalStore(state);
+
+  return { ok: true, order: localOrder };
+}
+
+export async function restoreOrder(
+  orderCode: string
+): Promise<{ ok: boolean; order?: TicketOrder; error?: string }> {
+  const cleanCode = orderCode.trim().toUpperCase();
+  const nowISO = new Date().toISOString();
+
+  // Try Supabase first
+  try {
+    const { data: existing } = await supabase
+      .from("orders")
+      .select("admin_notes")
+      .eq("order_code", cleanCode)
+      .maybeSingle();
+
+    const oldNotes = existing?.admin_notes || "";
+    const cleanNotes = oldNotes.replace(/\[DELETED\]\s*/g, "").trim();
+
+    let { data, error } = await supabase
+      .from("orders")
+      .update({
+        is_deleted: false,
+        deleted_at: null,
+        admin_notes: cleanNotes || null,
+        updated_at: nowISO,
+      })
+      .eq("order_code", cleanCode)
+      .select()
+      .maybeSingle();
+
+    if (error && error.message?.includes("is_deleted")) {
+      const fallbackRes = await supabase
+        .from("orders")
+        .update({
+          admin_notes: cleanNotes || null,
+          updated_at: nowISO,
+        })
+        .eq("order_code", cleanCode)
+        .select()
+        .maybeSingle();
+      data = fallbackRes.data;
+      error = fallbackRes.error;
+    }
+
+    if (!error && data) {
+      const updated = mapSupabaseRowToOrder(data);
+      const state = loadLocalStore();
+      state.orders[cleanCode] = updated;
+      saveLocalStore(state);
+      return { ok: true, order: updated };
+    }
+  } catch {
+    // Continue to local
+  }
+
+  // Local fallback
+  const state = loadLocalStore();
+  const localOrder = state.orders[cleanCode];
+  if (!localOrder) {
+    return { ok: false, error: "Pesanan tidak ditemukan" };
+  }
+
+  localOrder.isDeleted = false;
+  localOrder.deletedAt = undefined;
+  localOrder.adminNotes =
+    (localOrder.adminNotes || "").replace(/\[DELETED\]\s*/g, "").trim() || undefined;
   localOrder.updatedAt = nowISO;
   state.orders[cleanCode] = localOrder;
   saveLocalStore(state);

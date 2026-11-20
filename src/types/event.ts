@@ -94,6 +94,8 @@ export interface TicketOrder {
   adminNotes?: string;
   guest: GuestRegistration;
   qrPayload: string;
+  isDeleted?: boolean;
+  deletedAt?: string;
   createdAt: string;
   updatedAt?: string;
 }
