@@ -1,11 +1,12 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import {
   ArrowDown,
   ArrowUpRight,
+  Banknote,
   Calendar,
   Clock,
   Download,
@@ -19,7 +20,6 @@ import {
   Plus,
   Share2,
   ShieldCheck,
-  Sparkles,
   Ticket,
   Users,
   X,
@@ -79,11 +79,49 @@ const FLYER_ASSETS: AssetFlyer[] = [
   },
 ];
 
+function useCountdown(targetIso: string) {
+  const [timeLeft, setTimeLeft] = useState({
+    days: "00",
+    hours: "00",
+    minutes: "00",
+    seconds: "00",
+  });
+
+  useEffect(() => {
+    const target = new Date(targetIso).getTime();
+
+    const update = () => {
+      const now = Date.now();
+      const diff = Math.max(0, target - now);
+
+      const d = Math.floor(diff / (1000 * 60 * 60 * 24));
+      const h = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+      const m = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+      const s = Math.floor((diff % (1000 * 60)) / 1000);
+
+      setTimeLeft({
+        days: String(d).padStart(2, "0"),
+        hours: String(h).padStart(2, "0"),
+        minutes: String(m).padStart(2, "0"),
+        seconds: String(s).padStart(2, "0"),
+      });
+    };
+
+    update();
+    const timer = setInterval(update, 1000);
+    return () => clearInterval(timer);
+  }, [targetIso]);
+
+  return timeLeft;
+}
+
 export function HomeClient({ initialEvents }: HomeClientProps) {
   const [motionPaused, setMotionPaused] = useState(false);
   const [selectedModalEvent, setSelectedModalEvent] = useState<DuskEvent | null>(null);
   const [openFaq, setOpenFaq] = useState<string | null>("01");
   const [selectedFlyer, setSelectedFlyer] = useState<AssetFlyer | null>(null);
+
+  const countdown = useCountdown("2026-12-12T21:30:00+07:00");
 
   const heroEvent = useMemo(
     () =>
@@ -202,9 +240,57 @@ export function HomeClient({ initialEvents }: HomeClientProps) {
                   {heroEvent.venue}
                 </span>
                 <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-400/30 bg-emerald-400/10 px-3.5 py-1.5 text-emerald-300">
-                  <Sparkles className="h-3.5 w-3.5" />
+                  <Banknote className="h-3.5 w-3.5 text-emerald-400" />
                   Presale 1: Rp 150.000
                 </span>
+              </div>
+
+              {/* Live Event Countdown Timer */}
+              <div className="mt-6 max-w-md rounded-2xl border border-white/10 bg-black/50 p-3.5 backdrop-blur-md">
+                <div className="flex items-center justify-between text-[10px] font-extrabold uppercase tracking-widest text-[#ff9e68] mb-2.5">
+                  <span className="inline-flex items-center gap-1.5">
+                    <Clock className="h-3.5 w-3.5 text-[#ff7a3d] animate-pulse" />
+                    Doors Open Countdown
+                  </span>
+                  <span className="font-mono text-zinc-400 text-[10px]">
+                    12.12.2026 · 21:30 WIB
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-4 gap-2 text-center">
+                  <div className="rounded-xl border border-white/10 bg-white/[0.04] py-2 px-1">
+                    <div className="font-mono text-xl sm:text-2xl font-black text-white">
+                      {countdown.days}
+                    </div>
+                    <div className="text-[9px] font-bold uppercase text-zinc-400 tracking-wider mt-0.5">
+                      Days
+                    </div>
+                  </div>
+                  <div className="rounded-xl border border-white/10 bg-white/[0.04] py-2 px-1">
+                    <div className="font-mono text-xl sm:text-2xl font-black text-white">
+                      {countdown.hours}
+                    </div>
+                    <div className="text-[9px] font-bold uppercase text-zinc-400 tracking-wider mt-0.5">
+                      Hours
+                    </div>
+                  </div>
+                  <div className="rounded-xl border border-white/10 bg-white/[0.04] py-2 px-1">
+                    <div className="font-mono text-xl sm:text-2xl font-black text-white">
+                      {countdown.minutes}
+                    </div>
+                    <div className="text-[9px] font-bold uppercase text-zinc-400 tracking-wider mt-0.5">
+                      Mins
+                    </div>
+                  </div>
+                  <div className="rounded-xl border border-[#ff7a3d]/30 bg-[#ff7a3d]/15 py-2 px-1 shadow-[0_0_15px_rgba(255,122,61,0.2)]">
+                    <div className="font-mono text-xl sm:text-2xl font-black text-[#ff9e68]">
+                      {countdown.seconds}
+                    </div>
+                    <div className="text-[9px] font-bold uppercase text-[#ff9e68] tracking-wider mt-0.5">
+                      Secs
+                    </div>
+                  </div>
+                </div>
               </div>
 
               {/* Action Buttons */}
