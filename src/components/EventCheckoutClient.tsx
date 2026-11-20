@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
@@ -10,38 +11,38 @@ import {
   Check,
   CheckCircle2,
   Clock,
+  Copy,
+  CreditCard,
   Loader2,
   MapPin,
   Minus,
   Plus,
-  QrCode,
-  Share2,
   ShieldCheck,
-  Sparkles,
+  Upload,
   Users,
 } from "lucide-react";
 import { DuskEvent, GuestRegistration, TicketTier } from "@/types/event";
 import { formatIdr } from "@/data/events";
-import { buildWhatsappUrl, SITE_CONFIG } from "@/data/site";
-import { EventPoster } from "./EventPoster";
+import { buildTableRsvpUrl, buildWhatsappUrl, SITE_CONFIG } from "@/data/site";
 
 interface EventCheckoutClientProps {
   initialEvent: DuskEvent;
 }
 
-type PaymentMethod = "QRIS" | "BCA Virtual Account" | "GoPay / OVO";
-
 export function EventCheckoutClient({
   initialEvent,
 }: EventCheckoutClientProps) {
   const router = useRouter();
-  const [event, setEvent] = useState<DuskEvent>(initialEvent);
+  const event = initialEvent;
+
+  // Pilih default tier yang tersedia online
   const [selectedTierId, setSelectedTierId] = useState<string>(() => {
-    const firstInStock = initialEvent.tiers.find((t) => t.stock > 0);
-    return firstInStock?.id ?? initialEvent.tiers[0]?.id ?? "";
+    const firstOnline = event.tiers.find((t) => t.availableOnline !== false);
+    return firstOnline?.id ?? event.tiers[0]?.id ?? "";
   });
+
   const [quantity, setQuantity] = useState<number>(1);
-  const [copiedShare, setCopiedShare] = useState(false);
+  const [copiedAccount, setCopiedAccount] = useState(false);
 
   const [guest, setGuest] = useState<GuestRegistration>({
     fullName: "",
@@ -52,46 +53,33 @@ export function EventCheckoutClient({
     followedDusk: false,
   });
 
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("QRIS");
-  const [showPaymentSim, setShowPaymentSim] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  // Upload Bukti Transfer
+  const [proofFile, setProofFile] = useState<File | null>(null);
+  const [proofPreview, setProofPreview] = useState<string | null>(null);
 
-  // Live stock polling every 5 seconds (ala lucenne.world)
-  useEffect(() => {
-    if (event.status !== "upcoming") return;
-    const timer = setInterval(async () => {
-      try {
-        const res = await fetch(`/api/events/${event.slug}`, {
-          cache: "no-store",
-        });
-        if (!res.ok) return;
-        const data = (await res.json()) as { event: DuskEvent };
-        if (data.event) setEvent(data.event);
-      } catch {
-        // Ignore transient polling errors
-      }
-    }, 5000);
-    return () => clearInterval(timer);
-  }, [event.slug, event.status]);
+  const [submitting, setSubmitting] = useState(false);
+  const [uploadStatus, setUploadStatus] = useState<string>("");
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const selectedTier: TicketTier | undefined = event.tiers.find(
     (t) => t.id === selectedTierId
   );
 
+  const isTierAvailable = selectedTier && selectedTier.availableOnline !== false;
   const maxQty = selectedTier ? Math.min(10, Math.max(1, selectedTier.stock)) : 1;
   const safeQty = Math.min(quantity, maxQty);
-  const subtotal = selectedTier ? selectedTier.priceIdr * safeQty : 0;
-  const serviceFee = Math.round(subtotal * SITE_CONFIG.serviceFeeRate);
-  const total = subtotal + serviceFee;
 
-  const handleCopyShare = async () => {
+  // MURNI HARGA TIKET * QUANTITY (TIDAK ADA BIAYA TAMBAHAN / TAX FEE RP 5.000)
+  const subtotal = selectedTier ? selectedTier.priceIdr * safeQty : 0;
+  const total = subtotal;
+
+  const handleCopyAccountNumber = async () => {
     try {
-      await navigator.clipboard.writeText(window.location.href);
-      setCopiedShare(true);
-      setTimeout(() => setCopiedShare(false), 2200);
+      await navigator.clipboard.writeText(SITE_CONFIG.paymentManual.accountNumber);
+      setCopiedAccount(true);
+      setTimeout(() => setCopiedAccount(false), 2000);
     } catch {
-      // Ignore clipboard errors
+      // Ignore
     }
   };
 
@@ -101,622 +89,584 @@ export function EventCheckoutClient({
     setErrorMsg(null);
   };
 
-  const handleOpenPaymentSim = (e: React.FormEvent) => {
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 10 * 1024 * 1024) {
+      setErrorMsg("Ukuran file bukti transfer maksimal 10MB.");
+      return;
+    }
+
+    setProofFile(file);
+    setErrorMsg(null);
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      setProofPreview(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleSubmitOrder = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
 
-    if (!selectedTier || selectedTier.stock <= 0) {
-      setErrorMsg("Pilih kategori tiket yang masih tersedia.");
+    if (!selectedTier || selectedTier.availableOnline === false) {
+      setErrorMsg("Kategori tiket ini tidak dapat dibeli online.");
       return;
     }
+
     if (
       !guest.fullName.trim() ||
       !guest.instagramHandle.trim() ||
       !guest.email.trim() ||
       !guest.whatsapp.trim()
     ) {
-      setErrorMsg("Mohon lengkapi semua field registrasi pengunjung.");
+      setErrorMsg("Mohon lengkapi seluruh field data diri pembeli.");
       return;
     }
+
     if (!guest.followedDusk) {
-      setErrorMsg(
-        `Klik tombol verifikasi follow ${SITE_CONFIG.handle} terlebih dahulu.`
-      );
+      setErrorMsg(`Klik verifikasi follow ${SITE_CONFIG.handle} terlebih dahulu.`);
       return;
     }
 
-    setShowPaymentSim(true);
-  };
+    if (!proofFile) {
+      setErrorMsg("Harap upload foto bukti transfer pembayaran sebelum melanjutkan.");
+      return;
+    }
 
-  const handleConfirmSimulatedPayment = async () => {
-    if (!selectedTier) return;
     setSubmitting(true);
-    setErrorMsg(null);
+    setUploadStatus("Mengunggah bukti transfer...");
 
     try {
-      const res = await fetch("/api/orders", {
+      // 1. Upload Bukti Transfer ke Supabase Storage / Endpoint
+      const formData = new FormData();
+      formData.append("file", proofFile);
+      formData.append("orderCode", `DSK-${Date.now()}`);
+
+      const uploadRes = await fetch("/api/upload-proof", {
+        method: "POST",
+        body: formData,
+      });
+
+      let proofUrl = "";
+      if (uploadRes.ok) {
+        const uploadJson = await uploadRes.json();
+        proofUrl = uploadJson.url || "";
+      } else {
+        console.warn("Upload proof failed, proceeding with local fallback preview");
+        proofUrl = proofPreview || "";
+      }
+
+      setUploadStatus("Menyimpan pesanan ke database...");
+
+      // 2. Simpan order ke Supabase dengan status 'pending'
+      const orderRes = await fetch("/api/orders", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           eventSlug: event.slug,
           tierId: selectedTier.id,
           quantity: safeQty,
-          paymentMethod,
+          paymentMethod: "MANUAL_TRANSFER",
+          paymentProofUrl: proofUrl,
           guest,
         }),
       });
 
-      const data = await res.json();
-      if (!res.ok) {
-        setErrorMsg(data.error || "Gagal memproses pesanan.");
-        setShowPaymentSim(false);
-        setSubmitting(false);
-        return;
+      const orderData = await orderRes.json();
+      if (!orderRes.ok) {
+        throw new Error(orderData.error || "Gagal membuat pesanan.");
       }
 
-      router.push(`/ticket/${data.order.orderCode}`);
-    } catch {
-      setErrorMsg("Terjadi kesalahan jaringan. Silakan coba lagi.");
-      setShowPaymentSim(false);
+      // 3. Arahkan ke halaman Digital Pass / Status Tiket
+      router.push(`/ticket/${orderData.order.orderCode}`);
+    } catch (err) {
+      setErrorMsg(
+        err instanceof Error
+          ? err.message
+          : "Terjadi kendala saat memproses pesanan. Silakan coba kembali."
+      );
       setSubmitting(false);
+      setUploadStatus("");
     }
   };
 
   return (
     <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-12">
-      {/* Top Back Pill */}
-      <div className="mb-8 flex flex-wrap items-center justify-between gap-3">
+      {/* Back button & Title */}
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <Link
           href="/"
           className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/[0.04] px-4 py-2 text-xs font-bold text-white transition hover:border-[#ff7a3d]/60"
         >
           <ArrowLeft className="h-3.5 w-3.5" />
-          Back to Home
+          Back to Event Overview
         </Link>
 
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={handleCopyShare}
-            className="inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-white/[0.04] px-4 py-2 text-xs font-semibold text-white transition hover:border-white/35"
-          >
-            {copiedShare ? (
-              <>
-                <Check className="h-3.5 w-3.5 text-emerald-400" />
-                Link Copied
-              </>
-            ) : (
-              <>
-                <Share2 className="h-3.5 w-3.5 text-[#ff9e68]" />
-                Share Event
-              </>
-            )}
-          </button>
-
-          <a
-            href={buildWhatsappUrl(
-              `Cek event ${event.title} (${event.dateLabel}) di ${event.venue} by @duskjakarta_!`
-            )}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-white/[0.04] px-4 py-2 text-xs font-semibold text-[#b4a4c3] transition hover:text-white"
-          >
-            Share to WhatsApp
-            <ArrowUpRight className="h-3.5 w-3.5" />
-          </a>
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-400/40 bg-emerald-400/10 px-3 py-1 text-[11px] font-bold text-emerald-300">
+            <ShieldCheck className="h-3.5 w-3.5" />
+            Official DUSK Ticket Gateway
+          </span>
         </div>
       </div>
 
-      {/* Main 2-Column Layout */}
-      <div className="grid gap-10 lg:grid-cols-[0.82fr_1.18fr]">
-        {/* LEFT: Poster + Lineup + Venue Info */}
-        <div className="space-y-6">
-          <div className="mx-auto max-w-sm lg:max-w-none">
-            <EventPoster event={event} />
-          </div>
-
-          {/* Lineup Box */}
-          <div className="rounded-3xl border border-white/10 bg-[#140f1d] p-6">
-            <p className="kicker">Official Line-Up</p>
-            <div className="mt-4 grid grid-cols-2 gap-2.5">
-              {event.lineup.map((artist) => (
-                <div
-                  key={`${artist.role}-${artist.name}`}
-                  className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2.5"
-                >
-                  <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#ff9e68]">
-                    {artist.role}
-                  </span>
-                  <p className="mt-0.5 text-xs font-extrabold uppercase text-white">
-                    {artist.name}
-                  </p>
-                  {artist.handle && (
-                    <p className="text-[11px] text-[#b4a4c3]">{artist.handle}</p>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Venue & Entry Policy */}
-          <div className="rounded-3xl border border-white/10 bg-[#140f1d] p-6 space-y-3 text-xs text-[#b4a4c3]">
-            <p className="kicker">Venue &amp; House Rules</p>
-            <p className="text-sm font-bold text-white">{event.venue}</p>
-            <p>{event.venueAddress}</p>
-            <div className="pt-2 border-t border-white/10 space-y-1.5">
-              <p>
-                <strong className="text-white">Dress Code:</strong>{" "}
-                {event.dressCode}
-              </p>
-              <p>
-                <strong className="text-white">Age Policy:</strong>{" "}
-                {event.ageLimit}
-              </p>
-            </div>
-            <a
-              href={event.mapsUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 pt-2 text-xs font-bold text-[#ff9e68] hover:underline"
-            >
-              Open Google Maps <ArrowUpRight className="h-3.5 w-3.5" />
-            </a>
-          </div>
-        </div>
-
-        {/* RIGHT: Event Header + Ticket Tiers + Guest Registration */}
-        <div className="space-y-8">
-          <div>
-            <div className="flex flex-wrap items-center gap-2.5">
-              <span className="kicker">DUSK JAKARTA EVENT</span>
-              <span className="rounded-full border border-white/15 bg-white/5 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white/80">
-                {event.genre}
-              </span>
+      <div className="grid gap-8 lg:grid-cols-[1.1fr_0.9fr]">
+        {/* Left Column: Event Context & Tier Selection */}
+        <div>
+          {/* Event Header Banner */}
+          <div className="relative overflow-hidden rounded-3xl border border-white/15 bg-gradient-to-br from-[#1c0f1c] via-[#120a14] to-[#09070f] p-6 sm:p-8">
+            <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-[#ff9e68]">
+              <span className="kicker text-[11px]">DUSK JAKARTA PRESENTS</span>
+              <span className="font-mono">{event.dateLabel}</span>
             </div>
 
-            <h1 className="mt-3 text-4xl font-black uppercase display-tight text-white sm:text-5xl">
+            <h1 className="mt-2 text-3xl font-black uppercase display-tight text-white sm:text-5xl">
               {event.title}
             </h1>
-
-            <div className="mt-4 flex flex-wrap items-center gap-4 text-xs font-semibold text-[#d2c5df]">
-              <span className="inline-flex items-center gap-1.5">
-                <Calendar className="h-4 w-4 text-[#ff9e68]" />
-                {event.dayTimeLabel}
-              </span>
-              <span className="inline-flex items-center gap-1.5">
-                <MapPin className="h-4 w-4 text-[#ff9e68]" />
-                {event.venue}
-              </span>
-            </div>
-
-            <p className="mt-4 text-sm leading-relaxed text-[#b4a4c3]">
+            <p className="mt-2 text-xs text-[#d2c5df] sm:text-sm">
               {event.description}
             </p>
+
+            <div className="mt-4 flex flex-wrap items-center gap-3 text-xs text-white/80">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-white/5 px-3 py-1 border border-white/10">
+                <Calendar className="h-3.5 w-3.5 text-[#ff9e68]" />
+                {event.dateLabel}
+              </span>
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-white/5 px-3 py-1 border border-white/10">
+                <MapPin className="h-3.5 w-3.5 text-[#ff9e68]" />
+                {event.venue} ({event.venueArea})
+              </span>
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-white/5 px-3 py-1 border border-white/10">
+                <Clock className="h-3.5 w-3.5 text-[#ff9e68]" />
+                {event.dayTimeLabel}
+              </span>
+            </div>
+
+            {/* Headliner Highlight */}
+            <div className="mt-5 rounded-2xl border border-[#ff7a3d]/30 bg-[#ff7a3d]/10 p-3.5">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-[#ff9e68]">
+                Headliners
+              </p>
+              <div className="mt-1 flex flex-wrap items-center gap-3 font-black text-white text-sm sm:text-base">
+                <a
+                  href="https://instagram.com/nathhbenn_"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="hover:text-[#ff9e68] underline decoration-[#ff7a3d]/50"
+                >
+                  BENJI (@nathhbenn_)
+                </a>
+                <span>·</span>
+                <a
+                  href="https://instagram.com/mattsrn_"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="hover:text-[#ff9e68] underline decoration-[#ff7a3d]/50"
+                >
+                  MATT (@mattsrn_)
+                </a>
+              </div>
+            </div>
           </div>
 
-          {event.status === "past" ? (
-            <div className="rounded-3xl border border-white/15 bg-[#140f1d] p-8 text-center">
-              <p className="kicker">Event Archive</p>
-              <h2 className="mt-2 text-2xl font-black uppercase text-white">
-                Penjualan Tiket Ditutup
-              </h2>
-              <p className="mt-2 text-sm text-[#b4a4c3]">
-                Event ini telah berlangsung pada {event.dateLabel}. Cek event
-                terdekat kami berikutnya!
-              </p>
-              <Link
-                href="/events/till-further-notice"
-                className="btn-lift mt-6 inline-flex items-center gap-2 rounded-full bg-[#ff7a3d] px-6 py-3 text-xs font-extrabold uppercase tracking-[0.12em] text-[#09070f]"
-              >
-                Lihat Event 12.12.26 <ArrowUpRight className="h-4 w-4" />
-              </Link>
-            </div>
-          ) : (
-            <>
-              {/* STEP 1: CHOOSE TICKET TYPE */}
-              <div className="rounded-3xl border border-white/10 bg-[#140f1d] p-5 sm:p-7">
-                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 pb-4">
-                  <div>
-                    <h2 className="text-lg font-black uppercase tracking-tight text-white">
-                      1. Choose Ticket Type
-                    </h2>
-                    <p className="text-xs text-[#b4a4c3]">
-                      Harga dalam Rupiah (IDR). Stok diperbarui otomatis.
-                    </p>
-                  </div>
-
-                  {/* Pulsing Live Stock Badge */}
-                  <div className="inline-flex items-center gap-2 rounded-full border border-emerald-400/30 bg-emerald-400/10 px-3 py-1">
-                    <span className="relative flex h-2 w-2">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-                      <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-400" />
-                    </span>
-                    <span className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-emerald-300">
-                      Live Stock
-                    </span>
-                  </div>
-                </div>
-
-                <div className="mt-5 grid gap-3 sm:grid-cols-2">
-                  {event.tiers.map((tier) => {
-                    const isSoldOut = tier.stock <= 0;
-                    const isSelected = selectedTierId === tier.id && !isSoldOut;
-                    return (
-                      <button
-                        key={tier.id}
-                        type="button"
-                        disabled={isSoldOut}
-                        onClick={() => {
-                          setSelectedTierId(tier.id);
-                          setQuantity(1);
-                          setErrorMsg(null);
-                        }}
-                        className={`relative flex flex-col justify-between rounded-2xl border p-4 text-left transition ${
-                          isSoldOut
-                            ? "cursor-not-allowed border-white/10 bg-white/[0.02] opacity-50"
-                            : isSelected
-                            ? "border-[#ff7a3d] bg-[#ff7a3d]/10 shadow-[0_0_24px_rgba(255,122,61,0.18)]"
-                            : "border-white/10 bg-[#09070f]/70 hover:border-white/30"
-                        }`}
-                      >
-                        <div>
-                          <div className="flex items-start justify-between gap-2">
-                            <span className="text-sm font-extrabold text-white">
-                              {tier.name}
-                            </span>
-                            {tier.badge && !isSoldOut && (
-                              <span className="shrink-0 rounded-full bg-[#ff7a3d]/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[#ff9e68]">
-                                {tier.badge}
-                              </span>
-                            )}
-                            {isSoldOut && (
-                              <span className="shrink-0 rounded-full bg-red-500/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-red-300">
-                                Sold Out
-                              </span>
-                            )}
-                          </div>
-                          <p className="mt-1 text-[11px] leading-relaxed text-[#b4a4c3]">
-                            {tier.description}
-                          </p>
-                        </div>
-
-                        <div className="mt-4 pt-3 border-t border-white/10 flex items-end justify-between gap-2">
-                          <div>
-                            <p className="text-base font-black text-white">
-                              {formatIdr(tier.priceIdr)}
-                            </p>
-                            <p className="mt-0.5 inline-flex items-center gap-1 text-[10px] font-medium text-[#b4a4c3]">
-                              <Clock className="h-3 w-3 text-[#ff9e68]" />
-                              Max entry: {tier.maxEntryTime}
-                            </p>
-                          </div>
-                          <div className="text-right text-[10px] font-semibold text-white/70">
-                            <span className="inline-flex items-center gap-1">
-                              <Users className="h-3 w-3" /> {tier.bundlePax} Pax
-                            </span>
-                            <p className="text-[#ff9e68]">
-                              {tier.stock} left
-                            </p>
-                          </div>
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-
-                {/* Quantity & Price Calculator */}
-                {selectedTier && (
-                  <div className="mt-5 flex flex-col justify-between gap-4 rounded-2xl border border-white/10 bg-[#09070f] p-4 sm:flex-row sm:items-center">
-                    <div className="flex items-center gap-3">
-                      <span className="text-xs font-bold uppercase tracking-wider text-[#b4a4c3]">
-                        Quantity:
-                      </span>
-                      <div className="inline-flex items-center rounded-full border border-white/15 bg-[#140f1d]">
-                        <button
-                          type="button"
-                          onClick={() => setQuantity((q) => Math.max(1, q - 1))}
-                          className="p-2 text-white/80 hover:text-white"
-                          aria-label="Decrease quantity"
-                        >
-                          <Minus className="h-3.5 w-3.5" />
-                        </button>
-                        <span className="w-8 text-center font-mono text-sm font-bold text-white">
-                          {safeQty}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setQuantity((q) => Math.min(maxQty, q + 1))
-                          }
-                          className="p-2 text-white/80 hover:text-white"
-                          aria-label="Increase quantity"
-                        >
-                          <Plus className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
-                      <span className="text-xs text-[#b4a4c3]">
-                        ({selectedTier.bundlePax * safeQty} Pax)
-                      </span>
-                    </div>
-
-                    <div className="text-left sm:text-right">
-                      <p className="text-[11px] text-[#b4a4c3]">
-                        Subtotal {formatIdr(subtotal)} + Fee 5% (
-                        {formatIdr(serviceFee)})
-                      </p>
-                      <p className="text-lg font-black text-[#ff9e68]">
-                        Total: {formatIdr(total)}
-                      </p>
-                    </div>
-                  </div>
-                )}
+          {/* Ticket Tiers Selection */}
+          <div className="mt-8">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="kicker">Step 01</p>
+                <h2 className="text-xl font-black uppercase text-white sm:text-2xl">
+                  Select Ticket Tier
+                </h2>
               </div>
+              <span className="text-xs text-[#b4a4c3]">
+                Total = Harga Tiket × Qty (Tanpa Tax Fee)
+              </span>
+            </div>
 
-              {/* STEP 2: GUESTLIST & BUYER REGISTRATION FORM */}
-              <form
-                onSubmit={handleOpenPaymentSim}
-                className="rounded-3xl border border-white/10 bg-[#140f1d] p-5 sm:p-7 space-y-5"
-              >
-                <div className="border-b border-white/10 pb-4">
-                  <h2 className="text-lg font-black uppercase tracking-tight text-white">
-                    2. Guestlist &amp; Buyer Registration
-                  </h2>
-                  <p className="text-xs text-[#b4a4c3]">
-                    Data ini akan dicetak langsung pada E-Ticket / Digital Pass
-                    Anda.
-                  </p>
-                </div>
+            <div className="mt-4 space-y-3.5">
+              {event.tiers.map((tier) => {
+                const isSelected = tier.id === selectedTierId;
+                const isOnline = tier.availableOnline !== false;
 
-                {errorMsg && (
-                  <div className="rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-xs font-semibold text-red-200">
-                    {errorMsg}
-                  </div>
-                )}
+                return (
+                  <div
+                    key={tier.id}
+                    onClick={() => {
+                      if (isOnline) setSelectedTierId(tier.id);
+                    }}
+                    className={`relative rounded-2xl border p-5 transition ${
+                      !isOnline
+                        ? "border-white/10 bg-white/[0.02] opacity-60 cursor-not-allowed"
+                        : isSelected
+                        ? "border-[#ff7a3d] bg-[#ff7a3d]/10 shadow-[0_0_30px_rgba(255,122,61,0.2)] cursor-pointer"
+                        : "border-white/10 bg-[#120d1b] hover:border-white/30 cursor-pointer"
+                    }`}
+                  >
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h3 className="text-base font-black uppercase text-white sm:text-lg">
+                            {tier.name}
+                          </h3>
+                          {tier.badge && (
+                            <span
+                              className={`rounded-full px-2.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wider ${
+                                !isOnline
+                                  ? "bg-zinc-800 text-zinc-400 border border-zinc-700"
+                                  : "bg-[#ff7a3d] text-[#09070f]"
+                              }`}
+                            >
+                              {tier.badge}
+                            </span>
+                          )}
+                        </div>
+                        <p className="mt-1 text-xs text-[#d2c5df]">
+                          {tier.description}
+                        </p>
+                        <p className="mt-1 text-[11px] font-mono text-[#ff9e68]">
+                          Max Entry: {tier.maxEntryTime}
+                        </p>
+                      </div>
 
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div>
-                    <label className="mb-1.5 block text-xs font-bold text-white">
-                      Nama Lengkap *
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="e.g. Benji Pratama"
-                      value={guest.fullName}
-                      onChange={(e) =>
-                        setGuest((g) => ({ ...g, fullName: e.target.value }))
-                      }
-                      className="w-full rounded-xl border border-white/15 bg-[#09070f] px-3.5 py-2.5 text-sm text-white placeholder:text-white/30 outline-none focus:border-[#ff7a3d]"
-                    />
-                  </div>
+                      <div className="text-right">
+                        <div className="text-lg font-black text-white sm:text-xl">
+                          {formatIdr(tier.priceIdr)}
+                        </div>
+                        <span className="text-[10px] uppercase tracking-wider text-zinc-400">
+                          {isOnline ? "Per Person" : "On The Spot Only"}
+                        </span>
+                      </div>
+                    </div>
 
-                  <div>
-                    <label className="mb-1.5 block text-xs font-bold text-white">
-                      Instagram Handle *
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="@username"
-                      value={guest.instagramHandle}
-                      onChange={(e) =>
-                        setGuest((g) => ({
-                          ...g,
-                          instagramHandle: e.target.value,
-                        }))
-                      }
-                      className="w-full rounded-xl border border-white/15 bg-[#09070f] px-3.5 py-2.5 text-sm text-white placeholder:text-white/30 outline-none focus:border-[#ff7a3d]"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="mb-1.5 block text-xs font-bold text-white">
-                      Email *
-                    </label>
-                    <input
-                      type="email"
-                      required
-                      placeholder="name@email.com"
-                      value={guest.email}
-                      onChange={(e) =>
-                        setGuest((g) => ({ ...g, email: e.target.value }))
-                      }
-                      className="w-full rounded-xl border border-white/15 bg-[#09070f] px-3.5 py-2.5 text-sm text-white placeholder:text-white/30 outline-none focus:border-[#ff7a3d]"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="mb-1.5 block text-xs font-bold text-white">
-                      No. WhatsApp *
-                    </label>
-                    <input
-                      type="tel"
-                      required
-                      placeholder="0812xxxxxxxx"
-                      value={guest.whatsapp}
-                      onChange={(e) =>
-                        setGuest((g) => ({ ...g, whatsapp: e.target.value }))
-                      }
-                      className="w-full rounded-xl border border-white/15 bg-[#09070f] px-3.5 py-2.5 text-sm text-white placeholder:text-white/30 outline-none focus:border-[#ff7a3d]"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="mb-1.5 block text-xs font-bold text-white">
-                    Gender
-                  </label>
-                  <div className="flex flex-wrap gap-2">
-                    {(["Male", "Female", "Prefer not to say"] as const).map(
-                      (option) => (
-                        <button
-                          key={option}
-                          type="button"
-                          onClick={() =>
-                            setGuest((g) => ({ ...g, gender: option }))
-                          }
-                          className={`rounded-full border px-4 py-1.5 text-xs font-semibold transition ${
-                            guest.gender === option
-                              ? "border-[#ff7a3d] bg-[#ff7a3d]/15 text-[#ff9e68]"
-                              : "border-white/15 bg-[#09070f] text-[#b4a4c3] hover:text-white"
-                          }`}
-                        >
-                          {option}
-                        </button>
-                      )
+                    {!isOnline && (
+                      <div className="mt-3 rounded-lg bg-zinc-900/80 px-3 py-1.5 text-xs text-amber-300 border border-amber-500/20">
+                        ⚠️ Tiket FDC tidak dijual online. Tersedia pembelian langsung di pintu masuk venue pada hari acara.
+                      </div>
                     )}
                   </div>
-                </div>
+                );
+              })}
+            </div>
+          </div>
 
-                {/* Follow @duskjakarta_ Verification */}
-                <div className="rounded-2xl border border-[#ff9e68]/30 bg-[#09070f] p-4">
-                  <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
-                    <div className="flex items-start gap-3">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mt-0.5 h-5 w-5 shrink-0 text-[#ff9e68]">
-                        <rect width="20" height="20" x="2" y="2" rx="5" ry="5" />
-                        <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" />
-                        <line x1="17.5" x2="17.51" y1="6.5" y2="6.5" />
-                      </svg>
-                      <div>
-                        <p className="text-xs font-extrabold uppercase tracking-wide text-white">
-                          Wajib Follow {SITE_CONFIG.handle}
-                        </p>
-                        <p className="text-[11px] text-[#b4a4c3]">
-                          Verifikasi akun Instagram Anda mengikuti{" "}
-                          {SITE_CONFIG.handle} untuk mengaktifkan E-Ticket.
-                        </p>
-                      </div>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={handleVerifyFollow}
-                      className={`shrink-0 inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-xs font-extrabold transition ${
-                        guest.followedDusk
-                          ? "border border-emerald-400/40 bg-emerald-400/15 text-emerald-300"
-                          : "bg-white text-[#09070f] hover:bg-[#ff9e68]"
-                      }`}
-                    >
-                      {guest.followedDusk ? (
-                        <>
-                          <CheckCircle2 className="h-4 w-4" />
-                          Verified Following
-                        </>
-                      ) : (
-                        <>
-                          Follow &amp; Verify
-                          <ArrowUpRight className="h-3.5 w-3.5" />
-                        </>
-                      )}
-                    </button>
-                  </div>
-                </div>
-
-                {/* Payment Method */}
-                <div>
-                  <label className="mb-2 block text-xs font-bold text-white">
-                    Metode Pembayaran
-                  </label>
-                  <div className="grid gap-2.5 sm:grid-cols-3">
-                    {(
-                      ["QRIS", "BCA Virtual Account", "GoPay / OVO"] as const
-                    ).map((method) => (
-                      <button
-                        key={method}
-                        type="button"
-                        onClick={() => setPaymentMethod(method)}
-                        className={`rounded-xl border px-3.5 py-2.5 text-xs font-bold transition ${
-                          paymentMethod === method
-                            ? "border-[#ff7a3d] bg-[#ff7a3d]/15 text-white"
-                            : "border-white/10 bg-[#09070f] text-[#b4a4c3] hover:text-white"
-                        }`}
-                      >
-                        {method}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <button
-                  type="submit"
-                  className="btn-lift flex w-full items-center justify-center gap-2 rounded-full bg-[#ff7a3d] py-4 text-xs font-extrabold uppercase tracking-[0.14em] text-[#09070f] shadow-[0_12px_36px_rgba(255,122,61,0.3)] hover:bg-[#ff945f]"
-                >
-                  <Sparkles className="h-4 w-4" />
-                  Checkout &amp; Pay {formatIdr(total)}
-                </button>
-              </form>
-            </>
-          )}
-        </div>
-      </div>
-
-      {/* CHECKOUT SIMULATION MODAL */}
-      {showPaymentSim && selectedTier && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-md"
-          role="dialog"
-          aria-modal="true"
-        >
-          <div className="w-full max-w-md rounded-3xl border border-[#ff9e68]/30 bg-[#140f1d] p-6 shadow-2xl">
-            <div className="flex items-center justify-between border-b border-white/10 pb-3">
+          {/* Table RSVP WhatsApp Section */}
+          <div className="mt-8 rounded-3xl border border-white/15 bg-gradient-to-r from-[#170e24] via-[#130b1c] to-[#0d0714] p-6">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
               <div>
-                <p className="kicker">Payment Simulation</p>
-                <h3 className="mt-1 text-xl font-black uppercase text-white">
-                  {paymentMethod}
+                <span className="kicker text-[#ff9e68]">VIP TABLE &amp; SOFA RSVP</span>
+                <h3 className="text-lg font-black uppercase text-white">
+                  Ingin Booking Table atau Sofa?
                 </h3>
+                <p className="mt-1 text-xs text-[#b4a4c3]">
+                  Hubungi tim reservasi kami langsung via WhatsApp untuk ketersediaan sofa &amp; minimum charge.
+                </p>
               </div>
-              <ShieldCheck className="h-6 w-6 text-emerald-400" />
+
+              <a
+                href={buildTableRsvpUrl(event.title, event.venue)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="btn-lift inline-flex items-center justify-center gap-2 rounded-full bg-emerald-500 px-5 py-3 text-xs font-black uppercase tracking-wider text-[#09070f] hover:bg-emerald-400 shrink-0"
+              >
+                RSVP Table WhatsApp
+                <ArrowUpRight className="h-4 w-4" />
+              </a>
+            </div>
+          </div>
+        </div>
+
+        {/* Right Column: Checkout Form & Manual Payment */}
+        <div>
+          <form
+            onSubmit={handleSubmitOrder}
+            className="sticky top-20 rounded-3xl border border-white/15 bg-[#120d1b] p-6 shadow-2xl sm:p-8"
+          >
+            <div className="border-b border-white/10 pb-4">
+              <p className="kicker">Step 02 &amp; 03</p>
+              <h2 className="text-xl font-black uppercase text-white sm:text-2xl">
+                Checkout &amp; Payment
+              </h2>
             </div>
 
-            <div className="mt-5 rounded-2xl border border-white/10 bg-[#09070f] p-5 text-center">
-              <div className="mx-auto flex h-32 w-32 items-center justify-center rounded-2xl border border-dashed border-[#ff9e68]/40 bg-white/5">
-                <QrCode className="h-20 w-20 text-[#ff9e68]" />
+            {/* Selected Tier & Quantity */}
+            <div className="mt-5 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+              <div className="flex items-center justify-between text-xs text-[#b4a4c3]">
+                <span>Tiket Dipilih:</span>
+                <span className="font-bold text-white uppercase">
+                  {selectedTier?.name}
+                </span>
               </div>
-              <p className="mt-3 text-xs text-[#b4a4c3]">
-                {selectedTier.name} × {safeQty} ({selectedTier.bundlePax * safeQty}{" "}
-                Pax)
-              </p>
-              <p className="mt-1 text-2xl font-black text-white">
-                {formatIdr(total)}
-              </p>
-              <p className="mt-2 text-[11px] text-[#b4a4c3]">
-                Simulasi gateway pembayaran instan. Klik tombol di bawah untuk
-                menerbitkan E-Ticket QR Anda.
-              </p>
+              <div className="mt-3 flex items-center justify-between">
+                <span className="text-xs text-[#b4a4c3]">Jumlah Tiket:</span>
+                <div className="inline-flex items-center gap-3 rounded-full border border-white/15 bg-black/40 px-3 py-1">
+                  <button
+                    type="button"
+                    disabled={safeQty <= 1 || !isTierAvailable}
+                    onClick={() => setQuantity((q) => Math.max(1, q - 1))}
+                    className="text-white hover:text-[#ff7a3d] disabled:opacity-30"
+                  >
+                    <Minus className="h-3.5 w-3.5" />
+                  </button>
+                  <span className="font-mono text-sm font-bold text-white">
+                    {safeQty}
+                  </span>
+                  <button
+                    type="button"
+                    disabled={safeQty >= maxQty || !isTierAvailable}
+                    onClick={() => setQuantity((q) => Math.min(maxQty, q + 1))}
+                    className="text-white hover:text-[#ff7a3d] disabled:opacity-30"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Price Calculation Breakdown */}
+              <div className="mt-4 border-t border-white/10 pt-3 space-y-1.5 text-xs">
+                <div className="flex justify-between text-[#b4a4c3]">
+                  <span>Harga Tiket ({safeQty}x):</span>
+                  <span>{formatIdr(subtotal)}</span>
+                </div>
+                <div className="flex justify-between text-emerald-400 font-semibold">
+                  <span>Biaya Tambahan / Tax:</span>
+                  <span>Rp 0 (FREE)</span>
+                </div>
+                <div className="flex justify-between border-t border-white/10 pt-2 text-base font-black text-white">
+                  <span>Total Tagihan:</span>
+                  <span className="text-[#ff7a3d]">{formatIdr(total)}</span>
+                </div>
+              </div>
             </div>
 
-            <div className="mt-5 flex flex-col gap-2.5">
+            {/* Guest Details */}
+            <div className="mt-6 space-y-4">
+              <h3 className="text-xs font-extrabold uppercase tracking-wider text-[#ff9e68]">
+                Data Pembeli (Digital Pass)
+              </h3>
+
+              <div>
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-[#b4a4c3]">
+                  Nama Lengkap (Sesuai KTP / ID) *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={guest.fullName}
+                  onChange={(e) =>
+                    setGuest({ ...guest, fullName: e.target.value })
+                  }
+                  placeholder="Contoh: Alvin Pratama"
+                  className="mt-1 w-full rounded-xl border border-white/15 bg-black/40 px-3.5 py-2.5 text-xs text-white placeholder-zinc-500 outline-none focus:border-[#ff7a3d]"
+                />
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-[#b4a4c3]">
+                    Email *
+                  </label>
+                  <input
+                    type="email"
+                    required
+                    value={guest.email}
+                    onChange={(e) =>
+                      setGuest({ ...guest, email: e.target.value })
+                    }
+                    placeholder="email@anda.com"
+                    className="mt-1 w-full rounded-xl border border-white/15 bg-black/40 px-3.5 py-2.5 text-xs text-white placeholder-zinc-500 outline-none focus:border-[#ff7a3d]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-[#b4a4c3]">
+                    No. WhatsApp *
+                  </label>
+                  <input
+                    type="tel"
+                    required
+                    value={guest.whatsapp}
+                    onChange={(e) =>
+                      setGuest({ ...guest, whatsapp: e.target.value })
+                    }
+                    placeholder="081234567890"
+                    className="mt-1 w-full rounded-xl border border-white/15 bg-black/40 px-3.5 py-2.5 text-xs text-white placeholder-zinc-500 outline-none focus:border-[#ff7a3d]"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-[#b4a4c3]">
+                  Instagram Handle *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={guest.instagramHandle}
+                  onChange={(e) =>
+                    setGuest({ ...guest, instagramHandle: e.target.value })
+                  }
+                  placeholder="@username_anda"
+                  className="mt-1 w-full rounded-xl border border-white/15 bg-black/40 px-3.5 py-2.5 text-xs text-white placeholder-zinc-500 outline-none focus:border-[#ff7a3d]"
+                />
+              </div>
+
+              {/* Verify Follow IG */}
+              <div className="rounded-xl border border-white/10 bg-white/[0.02] p-3 flex items-center justify-between gap-3">
+                <div className="text-xs text-[#d2c5df]">
+                  Follow Instagram{" "}
+                  <strong className="text-white">{SITE_CONFIG.handle}</strong>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleVerifyFollow}
+                  className={`btn-lift inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold ${
+                    guest.followedDusk
+                      ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
+                      : "bg-[#ff7a3d] text-[#09070f]"
+                  }`}
+                >
+                  {guest.followedDusk ? (
+                    <>
+                      <Check className="h-3.5 w-3.5" /> Followed
+                    </>
+                  ) : (
+                    "Verify Follow"
+                  )}
+                </button>
+              </div>
+            </div>
+
+            {/* Manual Payment Transfer Section */}
+            <div className="mt-6 rounded-2xl border border-[#ff7a3d]/40 bg-[#170e24] p-4">
+              <div className="flex items-center gap-2 text-xs font-black uppercase text-[#ff9e68]">
+                <CreditCard className="h-4 w-4" />
+                Instruksi Transfer Manual
+              </div>
+
+              <div className="mt-3 rounded-xl bg-black/50 p-3 text-xs space-y-1.5">
+                <div className="text-[#b4a4c3]">Bank Tujuan:</div>
+                <div className="font-bold text-white text-sm">
+                  {SITE_CONFIG.paymentManual.bankName}
+                </div>
+
+                <div className="mt-2 flex items-center justify-between border-t border-white/10 pt-2">
+                  <div>
+                    <span className="text-[10px] uppercase text-[#b4a4c3]">
+                      No. Rekening:
+                    </span>
+                    <div className="font-mono text-base font-extrabold text-[#ff9e68]">
+                      {SITE_CONFIG.paymentManual.accountNumber}
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleCopyAccountNumber}
+                    className="inline-flex items-center gap-1 rounded-full border border-white/20 bg-white/5 px-2.5 py-1 text-[11px] font-semibold text-white hover:border-[#ff9e68]"
+                  >
+                    {copiedAccount ? (
+                      <>
+                        <Check className="h-3 w-3 text-emerald-400" /> Disalin
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="h-3 w-3" /> Salin No. Rek
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                <div className="pt-1 text-[11px] text-zinc-400">
+                  Atas Nama:{" "}
+                  <strong className="text-white">
+                    {SITE_CONFIG.paymentManual.accountHolder}
+                  </strong>
+                </div>
+
+                <div className="pt-2 text-[11px] font-bold text-emerald-400">
+                  Nominal Transfer: {formatIdr(total)}
+                </div>
+              </div>
+
+              {/* Upload Bukti Transfer */}
+              <div className="mt-4">
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-white">
+                  Upload Foto Bukti Transfer *
+                </label>
+                <div className="mt-2">
+                  <label className="flex flex-col items-center justify-center rounded-xl border border-dashed border-white/25 bg-black/30 p-4 text-center cursor-pointer hover:border-[#ff7a3d] transition">
+                    <Upload className="h-6 w-6 text-[#ff9e68]" />
+                    <span className="mt-2 text-xs font-semibold text-white">
+                      {proofFile ? proofFile.name : "Klik untuk pilih foto struk / m-Banking"}
+                    </span>
+                    <span className="mt-1 text-[10px] text-zinc-400">
+                      Format JPG, PNG, WEBP (Maksimal 10MB)
+                    </span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleFileChange}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
+
+                {proofPreview && (
+                  <div className="mt-3 relative w-full h-32 rounded-xl overflow-hidden border border-white/20">
+                    <Image
+                      src={proofPreview}
+                      alt="Preview Bukti Transfer"
+                      fill
+                      className="object-contain bg-black/60"
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {errorMsg && (
+              <div className="mt-4 rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-300">
+                {errorMsg}
+              </div>
+            )}
+
+            {uploadStatus && (
+              <div className="mt-4 flex items-center gap-2 rounded-xl border border-blue-500/30 bg-blue-500/10 p-3 text-xs text-blue-300">
+                <Loader2 className="h-4 w-4 animate-spin shrink-0" />
+                <span>{uploadStatus}</span>
+              </div>
+            )}
+
+            {/* Submit Button */}
+            <div className="mt-6">
               <button
-                type="button"
-                disabled={submitting}
-                onClick={handleConfirmSimulatedPayment}
-                className="btn-lift flex w-full items-center justify-center gap-2 rounded-full bg-emerald-400 py-3.5 text-xs font-extrabold uppercase tracking-[0.12em] text-[#09070f] disabled:opacity-60"
+                type="submit"
+                disabled={submitting || !isTierAvailable}
+                className="btn-lift flex w-full items-center justify-center gap-2 rounded-full bg-[#ff7a3d] py-4 text-xs font-black uppercase tracking-[0.16em] text-[#09070f] shadow-[0_10px_35px_rgba(255,122,61,0.35)] hover:bg-[#ff945f] disabled:opacity-40"
               >
                 {submitting ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin" />
-                    Generating E-Ticket...
+                    Memproses Pembayaran...
                   </>
                 ) : (
                   <>
-                    <CheckCircle2 className="h-4 w-4" />
-                    Simulate Payment Success
+                    Kirim Bukti &amp; Beli Tiket ({formatIdr(total)})
+                    <ArrowUpRight className="h-4 w-4" />
                   </>
                 )}
               </button>
-
-              <button
-                type="button"
-                disabled={submitting}
-                onClick={() => setShowPaymentSim(false)}
-                className="w-full rounded-full border border-white/15 py-3 text-xs font-bold text-[#b4a4c3] hover:text-white"
-              >
-                Cancel
-              </button>
+              <p className="mt-2 text-center text-[10px] text-zinc-400">
+                Pesanan akan diverifikasi oleh panitia DUSK JAKARTA (Approval 5-15 menit).
+              </p>
             </div>
-          </div>
+          </form>
         </div>
-      )}
+      </div>
     </main>
   );
 }

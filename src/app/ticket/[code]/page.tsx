@@ -15,7 +15,7 @@ export default async function TicketPassPage({
 }) {
   await connection();
   const { code } = await params;
-  const order = getTicketOrderByCode(code);
+  const order = await getTicketOrderByCode(code);
 
   if (!order) {
     notFound();

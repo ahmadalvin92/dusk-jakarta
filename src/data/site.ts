@@ -1,3 +1,7 @@
+/**
+ * KONFIGURASI GLOBAL WEBSITE DUSK JAKARTA
+ * Edit informasi nomor WhatsApp, rekening transfer, dan info dasar di sini.
+ */
 export const SITE_CONFIG = {
   brandName: "DUSK JAKARTA",
   shortName: "DUSK",
@@ -5,47 +9,73 @@ export const SITE_CONFIG = {
   secondaryHandle: "@afterdusk.tv",
   instagramUrl: "https://www.instagram.com/duskjakarta_/",
   linktreeUrl: "https://linktr.ee/duskjakarta",
-  whatsappNumber: "6281586868200",
+
+  // -------------------------------------------------------------
+  // KONSTANTA WHATSAPP (MUDAH DIUBAH KAPAN SAJA)
+  // -------------------------------------------------------------
+  whatsappNumber: "6281586868200", // Format internasional tanpa +, contoh: 628123456789
   whatsappDisplay: "+62 815-8686-8200",
+  tableRsvpWhatsapp: "6281586868200", // Nomor khusus Table RSVP
+
   city: "JAKARTA, INDONESIA",
   tagline: "Work hard, party harder. Curated Jakarta nightlife experiences.",
-  serviceFeeRate: 0.05, // 5% platform fee
+
+  // Tax fee dihapus sesuai permintaan (0%)
+  serviceFeeRate: 0,
+
+  // -------------------------------------------------------------
+  // PANDUAN PEMBAYARAN MANUAL (TRANSFER / QRIS)
+  // -------------------------------------------------------------
+  paymentManual: {
+    bankName: "BCA (Bank Central Asia)",
+    accountNumber: "8415868682", // Nomor rekening transfer (bisa diedit kapan saja)
+    accountHolder: "DUSK JAKARTA / ALVIN",
+    qrisNote: "Bisa transfer via BCA Mobile / ATM / m-Banking bank manapun",
+    confirmationNote: "Setelah transfer, upload foto bukti transfer Anda di form checkout. Tim panitia akan memverifikasi dalam 5-15 menit.",
+  },
+
   faqs: [
     {
       num: "01",
-      question: "Apakah tiket yang sudah dibeli bisa di-refund atau dipindahtangankan?",
+      question: "Bagaimana cara kerja pembayaran tiket manual & approval?",
       answer:
-        "Seluruh pembelian tiket bersifat final (non-refundable). Pastikan tanggal, kategori tiket, dan data diri sesuai sebelum menyelesaikan pembayaran. Perubahan nama hanya dapat diajukan maksimal H-1 melalui WhatsApp Support resmi @duskjakarta_.",
+        "Pilih tier tiket yang Anda inginkan (Presale 1 / Presale 2), isi data pengunjung, lalu lakukan transfer sesuai nominal ke rekening BCA resmi kami. Unggah foto bukti transfer di form. Status tiket akan masuk ke tahap 'Pending Approval' dan langsung diverifikasi oleh tim panitia DUSK JAKARTA.",
     },
     {
       num: "02",
-      question: "Di mana channel resmi pembelian tiket & RSVP DUSK JAKARTA?",
+      question: "Apakah ada biaya admin / tax fee tambahan?",
       answer:
-        "Tiket resmi hanya dijual melalui platform ini dan tautan resmi pada bio Instagram @duskjakarta_ (linktr.ee/duskjakarta). Kami tidak bertanggung jawab atas transaksi dari reseller atau pihak ketiga tidak resmi.",
+        "TIDAK ADA. Total pembayaran tiket adalah murni harga tiket dikali jumlah kuantiti tiket yang Anda beli tanpa tambahan biaya admin atau tax fee.",
     },
     {
       num: "03",
-      question: "Kapan saya menerima E-Ticket / QR Code setelah checkout?",
+      question: "Kapan saya mendapatkan Digital Pass & QR Code?",
       answer:
-        "Begitu pembayaran terkonfirmasi, Digital Pass lengkap dengan QR Code unik langsung terbit di halaman konfirmasi dan dapat disimpan/di-screenshot untuk scan di pintu masuk venue.",
+        "Begitu pesanan Anda disetujui (Approved) oleh panitia melalui dashboard admin, Digital Pass dengan QR Code unik langsung aktif di link tiket Anda (/ticket/[code]) dan siap di-scan di gate masuk venue.",
     },
     {
       num: "04",
-      question: "Bagaimana cara reservasi VIP Table / Sofa?",
+      question: "Bagaimana cara reservasi VIP Table / Sofa di Zeek Jakarta?",
       answer:
-        "Anda dapat memesan VIP Table langsung melalui pilihan tier tiket di halaman event atau klik tombol RSVP Table via WhatsApp untuk mendapatkan floorplan, minimum charge, dan konfirmasi section.",
+        "Untuk reservasi VIP Table / Sofa, silakan klik tombol 'Table RSVP via WhatsApp'. Tim kami akan langsung mengirimkan floorplan, ketersediaan sofa, dan minimum charge.",
     },
     {
       num: "05",
-      question: "Apakah ada batas jam masuk (Maximum Entry Time)?",
+      question: "Apakah tiket FDC dijual secara online?",
       answer:
-        "Ya. Tiket Early Bird & Presale memiliki batas waktu check-in (misalnya 23:00 atau 23:30 WIB). Kedatangan melewati batas waktu tersebut dapat dikenakan selisih door charge sesuai kebijakan venue pada malam acara.",
+        "Tiket FDC (First Drink Charge - Rp 300.000) adalah tiket on-the-spot dan HANYA dijual langsung di venue saat malam acara berlangsung (tidak dijual online).",
     },
   ],
 };
 
-export function buildWhatsappUrl(message: string): string {
-  return `https://api.whatsapp.com/send/?phone=${SITE_CONFIG.whatsappNumber}&text=${encodeURIComponent(
+export function buildWhatsappUrl(message: string, customPhone?: string): string {
+  const phone = customPhone || SITE_CONFIG.whatsappNumber;
+  return `https://api.whatsapp.com/send/?phone=${phone}&text=${encodeURIComponent(
     message
   )}&type=phone_number&app_absent=0`;
+}
+
+export function buildTableRsvpUrl(eventTitle = "TILL FURTHER NOTICE", venue = "Zeek Jakarta"): string {
+  const msg = `Halo DUSK JAKARTA, saya ingin RSVP VIP Table / Sofa untuk event ${eventTitle} (12 December 2026) di ${venue}. Mohon info floorplan dan minimum charge.`;
+  return buildWhatsappUrl(msg, SITE_CONFIG.tableRsvpWhatsapp);
 }

@@ -5,10 +5,14 @@ export async function GET(
   _request: Request,
   context: { params: Promise<{ code: string }> }
 ) {
-  const { code } = await context.params;
-  const order = getTicketOrderByCode(code);
-  if (!order) {
-    return NextResponse.json({ error: "Ticket not found" }, { status: 404 });
+  try {
+    const { code } = await context.params;
+    const order = await getTicketOrderByCode(code);
+    if (!order) {
+      return NextResponse.json({ error: "Ticket not found" }, { status: 404 });
+    }
+    return NextResponse.json({ order });
+  } catch {
+    return NextResponse.json({ error: "Server error" }, { status: 500 });
   }
-  return NextResponse.json({ order });
 }

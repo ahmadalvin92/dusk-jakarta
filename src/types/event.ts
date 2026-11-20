@@ -17,12 +17,14 @@ export interface TicketTier {
   initialStock: number;
   isFeatured?: boolean;
   badge?: string;
+  availableOnline?: boolean; // false untuk FDC (tidak dijual online)
 }
 
 export interface LineupArtist {
   name: string;
   handle?: string;
   role: "Headliner" | "DJ" | "B2B" | "MC";
+  instagramUrl?: string;
 }
 
 export interface DuskEvent {
@@ -45,6 +47,7 @@ export interface DuskEvent {
   description: string;
   dressCode: string;
   ageLimit: string;
+  flyerImage?: string; // Path ke flyer utama, e.g. "/aset/Main.png"
   /** Visual theme for the custom 4:5 poster & event accent */
   posterTheme: {
     bgFrom: string;
@@ -63,10 +66,12 @@ export interface GuestRegistration {
   instagramHandle: string;
   email: string;
   whatsapp: string;
-  gender: "Male" | "Female" | "Prefer not to say";
+  gender?: "Male" | "Female" | "Prefer not to say";
   followedDusk: boolean;
   referral?: string;
 }
+
+export type OrderPaymentStatus = "pending" | "approved" | "rejected";
 
 export interface TicketOrder {
   orderCode: string;
@@ -80,12 +85,15 @@ export interface TicketOrder {
   quantity: number;
   paxCount: number;
   unitPriceIdr: number;
-  serviceFeeIdr: number;
-  totalIdr: number;
+  serviceFeeIdr: number; // 0
+  totalIdr: number; // murni unitPriceIdr * quantity
   maxEntryTime: string;
-  paymentMethod: "QRIS" | "BCA Virtual Account" | "GoPay / OVO";
-  paymentStatus: "PAID";
+  paymentMethod: "MANUAL_TRANSFER" | "QRIS" | "BCA Virtual Account";
+  paymentStatus: OrderPaymentStatus;
+  paymentProofUrl?: string;
+  adminNotes?: string;
   guest: GuestRegistration;
   qrPayload: string;
   createdAt: string;
+  updatedAt?: string;
 }

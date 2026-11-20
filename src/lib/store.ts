@@ -2,11 +2,10 @@ import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
 import { SEED_EVENTS } from "@/data/events";
-import { SITE_CONFIG } from "@/data/site";
-import { DuskEvent, GuestRegistration, TicketOrder } from "@/types/event";
+import { DuskEvent, GuestRegistration, TicketOrder, OrderPaymentStatus } from "@/types/event";
+import { supabase } from "./supabase";
 
 interface StoreState {
-  /** Map of `${eventSlug}:${tierId}` -> remaining stock */
   stockOverrides: Record<string, number>;
   orders: Record<string, TicketOrder>;
 }
@@ -14,7 +13,7 @@ interface StoreState {
 const DATA_DIR = path.join(process.cwd(), ".data");
 const STORE_FILE = path.join(DATA_DIR, "dusk-store.json");
 
-function loadStore(): StoreState {
+function loadLocalStore(): StoreState {
   try {
     if (fs.existsSync(STORE_FILE)) {
       const raw = fs.readFileSync(STORE_FILE, "utf8");
@@ -25,19 +24,19 @@ function loadStore(): StoreState {
       };
     }
   } catch {
-    // Fallback to clean store if file is corrupted or unreadable
+    // Fallback
   }
   return { stockOverrides: {}, orders: {} };
 }
 
-function saveStore(state: StoreState): void {
+function saveLocalStore(state: StoreState): void {
   try {
     if (!fs.existsSync(DATA_DIR)) {
       fs.mkdirSync(DATA_DIR, { recursive: true });
     }
     fs.writeFileSync(STORE_FILE, JSON.stringify(state, null, 2), "utf8");
   } catch {
-    // Ignore write errors on read-only filesystems
+    // Ignore on read-only environments
   }
 }
 
@@ -56,12 +55,12 @@ function applyStockOverrides(event: DuskEvent, state: StoreState): DuskEvent {
 }
 
 export function getEventsWithLiveStock(): DuskEvent[] {
-  const state = loadStore();
+  const state = loadLocalStore();
   return SEED_EVENTS.map((evt) => applyStockOverrides(evt, state));
 }
 
 export function getEventBySlug(slug: string): DuskEvent | null {
-  const state = loadStore();
+  const state = loadLocalStore();
   const found = SEED_EVENTS.find((evt) => evt.slug === slug);
   if (!found) return null;
   return applyStockOverrides(found, state);
@@ -71,14 +70,52 @@ export interface CreateOrderInput {
   eventSlug: string;
   tierId: string;
   quantity: number;
-  paymentMethod: "QRIS" | "BCA Virtual Account" | "GoPay / OVO";
+  paymentMethod?: "MANUAL_TRANSFER" | "QRIS" | "BCA Virtual Account";
+  paymentProofUrl?: string;
   guest: GuestRegistration;
 }
 
-export function createTicketOrder(
+/**
+ * Normalizes DB row from Supabase to TicketOrder interface
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapSupabaseRowToOrder(row: any): TicketOrder {
+  return {
+    orderCode: row.order_code,
+    eventSlug: row.event_slug,
+    eventTitle: row.event_title,
+    eventDateLabel: row.event_date_label || "Sat, 12 Dec 2026",
+    venue: row.venue || "Zeek Jakarta",
+    venueAddress: row.venue_address || "Jl. Suryo No. 15, Kebayoran Baru, Jakarta Selatan",
+    tierId: row.tier_id,
+    tierName: row.tier_name,
+    quantity: Number(row.quantity) || 1,
+    paxCount: Number(row.pax_count) || 1,
+    unitPriceIdr: Number(row.unit_price_idr),
+    serviceFeeIdr: 0,
+    totalIdr: Number(row.total_price_idr),
+    maxEntryTime: row.max_entry_time || "23:00 WIB",
+    paymentMethod: (row.payment_method as TicketOrder["paymentMethod"]) || "MANUAL_TRANSFER",
+    paymentStatus: (row.status as OrderPaymentStatus) || "pending",
+    paymentProofUrl: row.payment_proof_url || undefined,
+    adminNotes: row.admin_notes || undefined,
+    guest: {
+      fullName: row.full_name,
+      instagramHandle: row.instagram_handle,
+      email: row.email,
+      whatsapp: row.whatsapp,
+      gender: row.gender || "Prefer not to say",
+      followedDusk: true,
+    },
+    qrPayload: row.qr_payload,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+export async function createTicketOrder(
   input: CreateOrderInput
-): { ok: true; order: TicketOrder } | { ok: false; error: string; status: number } {
-  const state = loadStore();
+): Promise<{ ok: true; order: TicketOrder } | { ok: false; error: string; status: number }> {
   const baseEvent = SEED_EVENTS.find((e) => e.slug === input.eventSlug);
   if (!baseEvent) {
     return { ok: false, error: "Event tidak ditemukan.", status: 404 };
@@ -91,24 +128,20 @@ export function createTicketOrder(
     };
   }
 
-  const event = applyStockOverrides(baseEvent, state);
-  const tier = event.tiers.find((t) => t.id === input.tierId);
+  const tier = baseEvent.tiers.find((t) => t.id === input.tierId);
   if (!tier) {
     return { ok: false, error: "Kategori tiket tidak ditemukan.", status: 404 };
   }
 
-  const qty = Math.max(1, Math.min(10, Math.floor(input.quantity || 1)));
-  if (tier.stock < qty) {
+  if (tier.availableOnline === false) {
     return {
       ok: false,
-      error:
-        tier.stock === 0
-          ? "Maaf, tier tiket ini sudah Sold Out."
-          : `Stok tersisa hanya ${tier.stock}.`,
-      status: 409,
+      error: "Kategori tiket ini tidak dijual online (hanya tersedia On The Spot di venue).",
+      status: 400,
     };
   }
 
+  const qty = Math.max(1, Math.min(10, Math.floor(input.quantity || 1)));
   const { guest } = input;
   if (
     !guest?.fullName?.trim() ||
@@ -118,26 +151,19 @@ export function createTicketOrder(
   ) {
     return {
       ok: false,
-      error: "Mohon lengkapi seluruh data registrasi pengunjung.",
+      error: "Mohon lengkapi seluruh data registrasi (Nama, Email, WhatsApp, Instagram).",
       status: 400,
     };
   }
 
-  if (!guest.followedDusk) {
-    return {
-      ok: false,
-      error: "Harap verifikasi follow @duskjakarta_ terlebih dahulu.",
-      status: 400,
-    };
-  }
-
+  // Pure ticket price * quantity: NO TAX FEE!
   const subtotal = tier.priceIdr * qty;
-  const serviceFeeIdr = Math.round(subtotal * SITE_CONFIG.serviceFeeRate);
-  const totalIdr = subtotal + serviceFeeIdr;
+  const serviceFeeIdr = 0;
+  const totalIdr = subtotal; // Murni harga tiket * qty
   const paxCount = tier.bundlePax * qty;
 
   const randHex = crypto.randomBytes(3).toString("hex").toUpperCase();
-  const orderCode = `DSK-2026-${randHex}`;
+  const orderCode = `DSK-26-${randHex}`;
 
   const cleanHandle = guest.instagramHandle.trim().startsWith("@")
     ? guest.instagramHandle.trim()
@@ -145,21 +171,24 @@ export function createTicketOrder(
 
   const qrPayload = JSON.stringify({
     code: orderCode,
-    event: event.slug,
+    event: baseEvent.slug,
     tier: tier.name,
     pax: paxCount,
     holder: guest.fullName.trim(),
     ig: cleanHandle,
-    v: 1,
+    status: "pending",
+    v: 2,
   });
 
-  const order: TicketOrder = {
+  const nowISO = new Date().toISOString();
+
+  const newOrder: TicketOrder = {
     orderCode,
-    eventSlug: event.slug,
-    eventTitle: event.title,
-    eventDateLabel: event.dateLabel,
-    venue: event.venue,
-    venueAddress: event.venueAddress,
+    eventSlug: baseEvent.slug,
+    eventTitle: baseEvent.title,
+    eventDateLabel: baseEvent.dateLabel,
+    venue: baseEvent.venue,
+    venueAddress: baseEvent.venueAddress,
     tierId: tier.id,
     tierName: tier.name,
     quantity: qty,
@@ -168,27 +197,156 @@ export function createTicketOrder(
     serviceFeeIdr,
     totalIdr,
     maxEntryTime: tier.maxEntryTime,
-    paymentMethod: input.paymentMethod,
-    paymentStatus: "PAID",
+    paymentMethod: input.paymentMethod || "MANUAL_TRANSFER",
+    paymentStatus: "pending",
+    paymentProofUrl: input.paymentProofUrl || undefined,
     guest: {
-      ...guest,
       fullName: guest.fullName.trim(),
       instagramHandle: cleanHandle,
       email: guest.email.trim(),
       whatsapp: guest.whatsapp.trim(),
+      gender: guest.gender || "Prefer not to say",
+      followedDusk: true,
     },
     qrPayload,
-    createdAt: new Date().toISOString(),
+    createdAt: nowISO,
+    updatedAt: nowISO,
   };
 
-  state.stockOverrides[`${event.slug}:${tier.id}`] = tier.stock - qty;
-  state.orders[orderCode] = order;
-  saveStore(state);
+  // 1. Simpan ke Supabase Database
+  try {
+    const { error: sbError } = await supabase.from("orders").insert([
+      {
+        order_code: orderCode,
+        event_slug: baseEvent.slug,
+        event_title: baseEvent.title,
+        event_date_label: baseEvent.dateLabel,
+        venue: baseEvent.venue,
+        venue_address: baseEvent.venueAddress,
+        tier_id: tier.id,
+        tier_name: tier.name,
+        quantity: qty,
+        pax_count: paxCount,
+        unit_price_idr: tier.priceIdr,
+        total_price_idr: totalIdr,
+        max_entry_time: tier.maxEntryTime,
+        status: "pending",
+        full_name: guest.fullName.trim(),
+        email: guest.email.trim(),
+        whatsapp: guest.whatsapp.trim(),
+        instagram_handle: cleanHandle,
+        gender: guest.gender || "Prefer not to say",
+        payment_method: input.paymentMethod || "MANUAL_TRANSFER",
+        payment_proof_url: input.paymentProofUrl || null,
+        qr_payload: qrPayload,
+        created_at: nowISO,
+        updated_at: nowISO,
+      },
+    ]);
 
-  return { ok: true, order };
+    if (sbError) {
+      console.warn("Supabase insert warning:", sbError.message);
+    }
+  } catch (err) {
+    console.warn("Supabase connection fallback to local store:", err);
+  }
+
+  // 2. Simpan juga ke local fallback store
+  const state = loadLocalStore();
+  state.orders[orderCode] = newOrder;
+  saveLocalStore(state);
+
+  return { ok: true, order: newOrder };
 }
 
-export function getTicketOrderByCode(code: string): TicketOrder | null {
-  const state = loadStore();
-  return state.orders[code.toUpperCase()] ?? null;
+export async function getTicketOrderByCode(code: string): Promise<TicketOrder | null> {
+  const cleanCode = code.trim().toUpperCase();
+
+  // Try Supabase first
+  try {
+    const { data, error } = await supabase
+      .from("orders")
+      .select("*")
+      .eq("order_code", cleanCode)
+      .maybeSingle();
+
+    if (!error && data) {
+      return mapSupabaseRowToOrder(data);
+    }
+  } catch {
+    // Continue to fallback
+  }
+
+  // Fallback to local store
+  const state = loadLocalStore();
+  return state.orders[cleanCode] ?? null;
+}
+
+export async function getAllOrders(): Promise<TicketOrder[]> {
+  try {
+    const { data, error } = await supabase
+      .from("orders")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (!error && data && data.length > 0) {
+      return data.map(mapSupabaseRowToOrder);
+    }
+  } catch {
+    // Continue to fallback
+  }
+
+  const state = loadLocalStore();
+  return Object.values(state.orders).sort(
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+  );
+}
+
+export async function updateOrderStatus(
+  orderCode: string,
+  newStatus: OrderPaymentStatus,
+  adminNotes?: string
+): Promise<{ ok: boolean; order?: TicketOrder; error?: string }> {
+  const cleanCode = orderCode.trim().toUpperCase();
+  const nowISO = new Date().toISOString();
+
+  // 1. Update in Supabase
+  try {
+    const { data, error } = await supabase
+      .from("orders")
+      .update({
+        status: newStatus,
+        admin_notes: adminNotes || null,
+        updated_at: nowISO,
+      })
+      .eq("order_code", cleanCode)
+      .select()
+      .maybeSingle();
+
+    if (!error && data) {
+      const updated = mapSupabaseRowToOrder(data);
+      // Sync local store
+      const state = loadLocalStore();
+      state.orders[cleanCode] = updated;
+      saveLocalStore(state);
+      return { ok: true, order: updated };
+    }
+  } catch {
+    // Continue to local
+  }
+
+  // 2. Local fallback
+  const state = loadLocalStore();
+  const localOrder = state.orders[cleanCode];
+  if (!localOrder) {
+    return { ok: false, error: "Pesanan tidak ditemukan" };
+  }
+
+  localOrder.paymentStatus = newStatus;
+  if (adminNotes !== undefined) localOrder.adminNotes = adminNotes;
+  localOrder.updatedAt = nowISO;
+  state.orders[cleanCode] = localOrder;
+  saveLocalStore(state);
+
+  return { ok: true, order: localOrder };
 }
