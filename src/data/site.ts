@@ -28,9 +28,10 @@ export const SITE_CONFIG = {
   // -------------------------------------------------------------
   paymentManual: {
     bankName: "BCA (Bank Central Asia)",
-    accountNumber: "8415868682", // Nomor rekening transfer (bisa diedit kapan saja)
-    accountHolder: "DUSK JAKARTA / ALVIN",
-    qrisNote: "Bisa transfer via BCA Mobile / ATM / m-Banking bank manapun",
+    accountNumber: "0651737779", // Nomor rekening transfer resmi
+    accountNumberDisplay: "065 - 173 - 7779",
+    accountHolder: "NATHANIEL BENNETT",
+    qrisNote: "Bisa transfer via BCA Mobile / myBCA / ATM / m-Banking bank manapun",
     confirmationNote: "Setelah transfer, upload foto bukti transfer Anda di form checkout. Tim panitia akan memverifikasi dalam 5-15 menit.",
   },
 

@@ -459,7 +459,7 @@ export function EventCheckoutClient({
                   onChange={(e) =>
                     setGuest({ ...guest, fullName: e.target.value })
                   }
-                  placeholder="Contoh: Alvin Pratama"
+                  placeholder="Contoh: Nathaniel Bennett"
                   className="mt-1 w-full rounded-xl border border-white/15 bg-black/40 px-3.5 py-2.5 text-xs text-white placeholder-zinc-500 outline-none focus:border-[#ff7a3d]"
                 />
               </div>
@@ -559,7 +559,8 @@ export function EventCheckoutClient({
                       No. Rekening:
                     </span>
                     <div className="font-mono text-base font-extrabold text-[#ff9e68]">
-                      {SITE_CONFIG.paymentManual.accountNumber}
+                      {SITE_CONFIG.paymentManual.accountNumberDisplay ||
+                        SITE_CONFIG.paymentManual.accountNumber}
                     </div>
                   </div>
 
