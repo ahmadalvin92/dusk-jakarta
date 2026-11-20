@@ -19,7 +19,6 @@ import {
   Minus,
   Plus,
   ShieldCheck,
-  Upload,
   Users,
 } from "lucide-react";
 import { DuskEvent, GuestRegistration, TicketTier } from "@/types/event";
@@ -54,10 +53,6 @@ export function EventCheckoutClient({
     followedDusk: false,
   });
 
-  // Upload Bukti Transfer (Opsional - Utama dikirim via WhatsApp)
-  const [proofFile, setProofFile] = useState<File | null>(null);
-  const [proofPreview, setProofPreview] = useState<string | null>(null);
-
   const [submitting, setSubmitting] = useState(false);
   const [uploadStatus, setUploadStatus] = useState<string>("");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -90,25 +85,6 @@ export function EventCheckoutClient({
     setErrorMsg(null);
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    if (file.size > 10 * 1024 * 1024) {
-      setErrorMsg("Ukuran file maksimal 10MB.");
-      return;
-    }
-
-    setProofFile(file);
-    setErrorMsg(null);
-
-    const reader = new FileReader();
-    reader.onload = () => {
-      setProofPreview(reader.result as string);
-    };
-    reader.readAsDataURL(file);
-  };
-
   const handleSubmitOrder = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
@@ -134,35 +110,9 @@ export function EventCheckoutClient({
     }
 
     setSubmitting(true);
-    setUploadStatus("Menyimpan pesanan tiket...");
+    setUploadStatus("Menyimpan pesanan ke database...");
 
     try {
-      let proofUrl = "";
-
-      // Jika user memilih file, coba upload ringkas (tapi tidak memblokir jika kosong)
-      if (proofFile) {
-        setUploadStatus("Mengunggah foto bukti...");
-        try {
-          const formData = new FormData();
-          formData.append("file", proofFile);
-          formData.append("orderCode", `DSK-${Date.now()}`);
-
-          const uploadRes = await fetch("/api/upload-proof", {
-            method: "POST",
-            body: formData,
-          });
-
-          if (uploadRes.ok) {
-            const uploadJson = await uploadRes.json();
-            proofUrl = uploadJson.url || "";
-          }
-        } catch {
-          // Fallback tanpa gagal
-        }
-      }
-
-      setUploadStatus("Mendaftarkan ke database...");
-
       // Simpan order ke Supabase dengan status 'pending'
       const orderRes = await fetch("/api/orders", {
         method: "POST",
@@ -172,7 +122,6 @@ export function EventCheckoutClient({
           tierId: selectedTier.id,
           quantity: safeQty,
           paymentMethod: "MANUAL_TRANSFER",
-          paymentProofUrl: proofUrl || undefined,
           guest,
         }),
       });
@@ -605,47 +554,14 @@ export function EventCheckoutClient({
               </div>
 
               {/* Kirim Bukti via WhatsApp Notice */}
-              <div className="mt-4 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3.5">
-                <div className="flex items-center gap-2 text-xs font-bold text-emerald-300 uppercase">
-                  <MessageCircle className="h-4 w-4" />
+              <div className="mt-4 rounded-xl border border-emerald-500/40 bg-emerald-500/10 p-4">
+                <div className="flex items-center gap-2 text-xs font-bold text-emerald-300 uppercase tracking-wide">
+                  <MessageCircle className="h-4 w-4 shrink-0 text-emerald-400" />
                   Kirim Foto Struk via WhatsApp
                 </div>
-                <p className="mt-1 text-[11px] text-[#d2c5df] leading-relaxed">
-                  Setelah klik tombol di bawah, pesanan Anda akan langsung tercatat dan Anda akan otomatis terhubung ke WhatsApp Panitia (+62 815-8686-8200) untuk mengirimkan foto struk bukti transfer agar langsung di-Approve.
+                <p className="mt-1.5 text-xs text-[#d2c5df] leading-relaxed">
+                  Setelah klik tombol pesanan di bawah, Anda akan otomatis terhubung ke WhatsApp Panitia (+62 815-8686-8200) untuk mengirimkan foto struk bukti transfer agar pesanan langsung di-Approve.
                 </p>
-              </div>
-
-              {/* Optional Upload Box */}
-              <div className="mt-3">
-                <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-zinc-400">
-                  <span>Lampirkan Foto Struk (Opsional)</span>
-                  <span className="text-zinc-500">Bisa langsung di WhatsApp</span>
-                </div>
-                <div className="mt-1.5">
-                  <label className="flex items-center justify-center gap-2 rounded-xl border border-dashed border-white/20 bg-black/30 p-2.5 text-center cursor-pointer hover:border-[#ff7a3d] transition text-xs text-white">
-                    <Upload className="h-4 w-4 text-[#ff9e68]" />
-                    <span className="truncate max-w-[200px]">
-                      {proofFile ? proofFile.name : "Pilih foto jika ingin dilampirkan di web"}
-                    </span>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={handleFileChange}
-                      className="hidden"
-                    />
-                  </label>
-                </div>
-
-                {proofPreview && (
-                  <div className="mt-2 relative w-full h-24 rounded-lg overflow-hidden border border-white/20">
-                    <Image
-                      src={proofPreview}
-                      alt="Preview Bukti Transfer"
-                      fill
-                      className="object-contain bg-black/60"
-                    />
-                  </div>
-                )}
               </div>
             </div>
 
