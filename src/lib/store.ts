@@ -140,7 +140,10 @@ export async function createTicketOrder(
   if (tier.availableOnline === false) {
     return {
       ok: false,
-      error: "Kategori tiket ini tidak dijual online (hanya tersedia On The Spot di venue).",
+      error:
+        tier.id === "tfn-presale-2"
+          ? "Penjualan tiket Presale 2 saat ini ditutup sementara."
+          : "Kategori tiket ini tidak dijual online (hanya tersedia On The Spot di venue).",
       status: 400,
     };
   }

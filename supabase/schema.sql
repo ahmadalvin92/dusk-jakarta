@@ -60,8 +60,8 @@ CREATE TABLE IF NOT EXISTS public.tickets (
 INSERT INTO public.tickets (id, event_slug, name, description, price_idr, max_entry_time, bundle_pax, stock, available_online)
 VALUES
     ('tfn-presale-1', 'till-further-notice', 'Presale 1', 'Single entry pass · Max entry 23:30 WIB (Late fee Rp 100k s/d 00:00)', 150000, '23:30 WIB', 1, 100, true),
-    ('tfn-presale-2', 'till-further-notice', 'Presale 2', 'Single entry pass · Max entry 23:30 WIB (Late fee Rp 100k s/d 00:00)', 200000, '23:30 WIB', 1, 150, true),
-    ('tfn-fdc', 'till-further-notice', 'FDC (First Drink Charge)', 'On the spot entry di venue door mulai pukul 00:00 WIB (Includes 1 Drink Charge)', 300000, '01:30 WIB', 1, 0, false)
+    ('tfn-presale-2', 'till-further-notice', 'Presale 2', 'Single entry pass · Ditutup sementara', 200000, '23:30 WIB', 1, 0, false),
+    ('tfn-fdc', 'till-further-notice', 'FDC (First Drink Charge)', 'On the spot entry di venue door mulai pukul 00:00 WIB · Bebas masuk tanpa batas jam (Includes 1 Drink Charge)', 300000, 'Bebas Masuk / Hingga Selesai', 1, 0, false)
 ON CONFLICT (id) DO UPDATE SET
     price_idr = EXCLUDED.price_idr,
     available_online = EXCLUDED.available_online;

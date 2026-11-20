@@ -413,7 +413,7 @@ export function DigitalPassClient({ order: initialOrder }: DigitalPassClientProp
           {/* Bottom Note */}
           <div className="mt-8 rounded-2xl border border-white/10 bg-white/[0.02] p-4 text-[11px] text-[#b4a4c3] space-y-1.5">
             <p>
-              <strong className="text-white">Ketentuan Masuk:</strong> Tunjukkan halaman ini atau screenshot QR Code di pintu masuk Zeek Jakarta. Batas masuk (Max Entry) pukul <strong>{order.maxEntryTime}</strong>. Keterlambatan kedatangan (23:30 - 00:00 WIB) dikenakan Late Fee Rp 100.000 / tiket. Pukul 00:00 WIB ke atas loket beralih ke tiket FDC On The Spot. Wajib membawa identitas (KTP/Passport) asli 21+.
+              <strong className="text-white">Ketentuan Masuk:</strong> Tunjukkan halaman ini atau screenshot QR Code di pintu masuk Zeek Jakarta. Batas masuk tiket Presale pukul <strong>{order.maxEntryTime}</strong>. Keterlambatan kedatangan tiket Presale (23:30 - 00:00 WIB) dikenakan Late Fee Rp 100.000 / tiket. Pukul 00:00 WIB ke atas loket beralih ke tiket FDC On The Spot (bebas batas masuk). Wajib membawa identitas (KTP/Passport) asli 21+.
             </p>
             <p>
               Simpan link URL halaman ini untuk kemudahan akses saat tiba di lokasi.

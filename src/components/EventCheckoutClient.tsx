@@ -308,7 +308,9 @@ export function EventCheckoutClient({
 
                     {!isOnline && (
                       <div className="mt-3 rounded-lg bg-zinc-900/80 px-3 py-1.5 text-xs text-amber-300 border border-amber-500/20">
-                        ⚠️ Tiket FDC tidak dijual online. Tersedia pembelian langsung di pintu masuk venue pada hari acara.
+                        {tier.id === "tfn-presale-2"
+                          ? "🔒 Penjualan Presale 2 saat ini ditutup sementara."
+                          : "⚠️ Tiket FDC tidak dijual online. Tersedia langsung di pintu masuk venue mulai 00:00 WIB (bebas masuk tanpa batas jam)."}
                       </div>
                     )}
                   </div>
@@ -325,11 +327,11 @@ export function EventCheckoutClient({
                     Ketentuan Masuk Gate &amp; Late Fee:
                   </span>
                   <p className="text-[11px] leading-relaxed text-[#b4a4c3]">
-                    • <strong className="text-white">Presale 1 &amp; Presale 2:</strong> Max entry pukul <strong className="text-[#ff9e68]">23:30 WIB</strong>.
+                    • <strong className="text-white">Presale 1:</strong> Max entry pukul <strong className="text-[#ff9e68]">23:30 WIB</strong> (Presale 2 saat ini ditutup sementara).
                     <br />
-                    • <strong className="text-white">Late Fee:</strong> Kedatangan antara 23:30 - 00:00 WIB dikenakan Late Fee <strong className="text-amber-300">Rp 100.000 / tiket</strong> di pintu masuk.
+                    • <strong className="text-white">Late Fee:</strong> Kedatangan tiket Presale antara 23:30 - 00:00 WIB dikenakan Late Fee <strong className="text-amber-300">Rp 100.000 / tiket</strong> di pintu masuk.
                     <br />
-                    • <strong className="text-white">Lewat Pukul 00:00 WIB:</strong> Loket gate beralih ke tiket <strong className="text-white">FDC (First Drink Charge - Rp 300.000)</strong> On The Spot.
+                    • <strong className="text-white">Mulai Pukul 00:00 WIB:</strong> Akses gate beralih ke tiket <strong className="text-white">FDC (First Drink Charge - Rp 300.000)</strong> On The Spot tanpa batas jam masuk (bebas masuk hingga acara selesai).
                   </p>
                 </div>
               </div>

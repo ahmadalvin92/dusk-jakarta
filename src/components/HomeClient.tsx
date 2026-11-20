@@ -478,7 +478,11 @@ export function HomeClient({ initialEvents }: HomeClientProps) {
                         {formatIdr(tier.priceIdr)}
                       </div>
                       <span className="text-[11px] text-zinc-400">
-                        {isOnline ? "Harga Bersih / Net Price" : "On The Spot Only"}
+                        {tier.id === "tfn-presale-2" && !isOnline
+                          ? "Closed / Ditutup"
+                          : isOnline
+                          ? "Harga Bersih / Net Price"
+                          : "On The Spot Only"}
                       </span>
                     </div>
 
@@ -509,7 +513,7 @@ export function HomeClient({ initialEvents }: HomeClientProps) {
                         disabled
                         className="flex w-full items-center justify-center rounded-full border border-white/10 bg-white/5 py-3 text-xs font-bold text-zinc-500 cursor-not-allowed"
                       >
-                        Tidak Dijual Online
+                        {tier.id === "tfn-presale-2" ? "Ditutup Sementara" : "Tidak Dijual Online"}
                       </button>
                     )}
                   </div>
@@ -528,11 +532,11 @@ export function HomeClient({ initialEvents }: HomeClientProps) {
                     Ketentuan Masuk Gate &amp; Late Fee
                   </div>
                   <p className="leading-relaxed">
-                    • <strong>Presale 1 &amp; Presale 2:</strong> Batas masuk (Max Entry) pukul <span className="font-bold text-[#ff9e68]">23:30 WIB</span>.
+                    • <strong>Presale 1:</strong> Batas masuk (Max Entry) pukul <span className="font-bold text-[#ff9e68]">23:30 WIB</span> (Presale 2 saat ini ditutup sementara).
                     <br />
-                    • <strong>Late Fee:</strong> Keterlambatan kedatangan (23:30 – 00:00 WIB) dikenakan Late Fee <span className="font-bold text-amber-300">Rp 100.000 / tiket</span> di pintu masuk venue.
+                    • <strong>Late Fee:</strong> Keterlambatan kedatangan tiket Presale (23:30 – 00:00 WIB) dikenakan Late Fee <span className="font-bold text-amber-300">Rp 100.000 / tiket</span> di pintu masuk venue.
                     <br />
-                    • <strong>Lewat Pukul 00:00 WIB:</strong> Loket gate beralih ke tiket <span className="font-bold text-white">FDC (Rp 300.000 On The Spot)</span>.
+                    • <strong>Mulai Pukul 00:00 WIB:</strong> Loket gate beralih ke tiket <span className="font-bold text-white">FDC (Rp 300.000 On The Spot)</span> — <em>Bebas masuk tanpa batas jam hingga acara selesai</em>.
                   </p>
                 </div>
               </div>

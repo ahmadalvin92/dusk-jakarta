@@ -41,13 +41,13 @@ export const SITE_CONFIG = {
       num: "01",
       question: "Bagaimana cara kerja pembayaran tiket manual & approval?",
       answer:
-        "Pilih tier tiket yang Anda inginkan (Presale 1 / Presale 2), isi data pengunjung, lalu lakukan transfer sesuai nominal ke rekening BCA resmi kami. Setelah itu kirim foto struk bukti transfer ke WhatsApp panitia. Status tiket akan langsung diverifikasi dan di-approve oleh tim panitia DUSK JAKARTA.",
+        "Pilih tiket Presale yang sedang aktif (Presale 1), isi data pengunjung, lalu lakukan transfer sesuai nominal ke rekening BCA resmi kami. Setelah itu kirim foto struk bukti transfer ke WhatsApp panitia. Status tiket akan langsung diverifikasi dan di-approve oleh tim panitia DUSK JAKARTA.",
     },
     {
       num: "02",
       question: "Berapa batas waktu masuk (Max Entry) dan bagaimana jika terlambat?",
       answer:
-        "Untuk tiket Presale 1 dan Presale 2, batas waktu masuk (Max Entry) adalah pukul 23:30 WIB. Keterlambatan kedatangan antara pukul 23:30 s/d 00:00 WIB (12 malam) dikenakan Late Fee sebesar Rp 100.000 / tiket di gate venue. Mulai pukul 00:00 WIB ke atas, akses masuk beralih menggunakan tiket FDC (First Drink Charge - Rp 300.000) On The Spot.",
+        "Untuk pemegang tiket Presale, batas waktu masuk (Max Entry) adalah pukul 23:30 WIB. Keterlambatan kedatangan antara pukul 23:30 s/d 00:00 WIB (12 malam) dikenakan Late Fee sebesar Rp 100.000 / tiket di gate venue. Mulai pukul 00:00 WIB ke atas, akses masuk beralih menggunakan tiket FDC (First Drink Charge - Rp 300.000) On The Spot tanpa batas waktu masuk (bebas masuk kapan saja hingga acara selesai).",
     },
     {
       num: "03",
@@ -69,9 +69,9 @@ export const SITE_CONFIG = {
     },
     {
       num: "06",
-      question: "Apakah tiket FDC dijual secara online?",
+      question: "Apakah tiket FDC dijual secara online dan berapa batas masuknya?",
       answer:
-        "Tiket FDC (First Drink Charge - Rp 300.000) adalah tiket on-the-spot dan HANYA dijual langsung di pintu masuk venue mulai pukul 00:00 WIB saat malam acara berlangsung (tidak dijual online).",
+        "Tiket FDC (First Drink Charge - Rp 300.000) adalah tiket on-the-spot dan HANYA dijual langsung di pintu masuk venue mulai pukul 00:00 WIB saat malam acara berlangsung (tidak dijual online). Tiket FDC bebas batas masuk (bisa masuk kapan saja hingga acara selesai).",
     },
   ],
 };
