@@ -381,9 +381,6 @@ export function HomeClient({ initialEvents }: HomeClientProps) {
               <h2 className="mt-2 text-3xl font-black uppercase display-tight text-white sm:text-4xl">
                 Tickets &amp; Passes
               </h2>
-              <p className="mt-2 text-sm text-emerald-400 font-semibold">
-                ✓ Harga Bersih Murni · Bebas Biaya Tambahan / Tax Fee Rp 5.000
-              </p>
             </div>
 
             <Link
@@ -438,7 +435,7 @@ export function HomeClient({ initialEvents }: HomeClientProps) {
                         {formatIdr(tier.priceIdr)}
                       </div>
                       <span className="text-[11px] text-zinc-400">
-                        {isOnline ? "Net Price (No Tax / Platform Fee)" : "On The Spot Only"}
+                        {isOnline ? "Harga Bersih / Net Price" : "On The Spot Only"}
                       </span>
                     </div>
 

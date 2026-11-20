@@ -4,30 +4,28 @@ import React, { useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import {
-  ArrowLeft,
   Check,
-  CheckCircle2,
   ExternalLink,
   Eye,
-  Filter,
-  Hourglass,
+  EyeOff,
   Lock,
   MessageCircle,
   RefreshCw,
   Search,
-  ShieldAlert,
-  ShieldCheck,
-  TrendingUp,
   User,
   X,
 } from "lucide-react";
 import { TicketOrder, OrderPaymentStatus } from "@/types/event";
 import { formatIdr } from "@/data/events";
 import { DuskLogo } from "@/components/DuskLogo";
-import { buildWhatsappUrl } from "@/data/site";
 
 export default function AdminPage() {
-  const [pin, setPin] = useState<string>("");
+  const [username, setUsername] = useState<string>("benji");
+  const [password, setPassword] = useState<string>("");
+  const [showPassword, setShowPassword] = useState<boolean>(false);
+  const [authToken, setAuthToken] = useState<string>("");
+  const [loggedInUser, setLoggedInUser] = useState<string>("");
+
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [authError, setAuthError] = useState<string | null>(null);
 
@@ -40,43 +38,74 @@ export default function AdminPage() {
   const [selectedProofUrl, setSelectedProofUrl] = useState<string | null>(null);
   const [updatingCode, setUpdatingCode] = useState<string | null>(null);
 
-  // Check saved pin on mount
+  // Check saved token on mount
   useEffect(() => {
-    const savedPin = localStorage.getItem("dusk_admin_pin");
-    if (savedPin) {
-      setPin(savedPin);
-      fetchOrders(savedPin);
+    const savedToken = localStorage.getItem("dusk_admin_token");
+    const savedUser = localStorage.getItem("dusk_admin_user") || "benji";
+    if (savedToken) {
+      setAuthToken(savedToken);
+      setLoggedInUser(savedUser);
+      fetchOrders(savedToken);
     }
   }, []);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthError(null);
-    await fetchOrders(pin);
+    setLoading(true);
+
+    try {
+      const res = await fetch("/api/admin/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          username: username.trim(),
+          password: password.trim(),
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        setIsAuthenticated(false);
+        setAuthError(data.error || "Username atau password salah.");
+        return;
+      }
+
+      setAuthToken(data.token);
+      setLoggedInUser(data.user?.username || "benji");
+      localStorage.setItem("dusk_admin_token", data.token);
+      localStorage.setItem("dusk_admin_user", data.user?.username || "benji");
+
+      await fetchOrders(data.token);
+    } catch {
+      setAuthError("Gagal menghubungi server login.");
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const fetchOrders = async (currentPin: string) => {
+  const fetchOrders = async (token: string) => {
     setLoading(true);
     try {
       const res = await fetch("/api/admin/orders", {
         headers: {
-          "x-admin-pin": currentPin,
+          "x-admin-token": token,
         },
         cache: "no-store",
       });
 
       if (!res.ok) {
         setIsAuthenticated(false);
-        setAuthError("PIN Admin salah. Coba lagi (default: 1212).");
+        localStorage.removeItem("dusk_admin_token");
+        setAuthError("Sesi login berakhir. Silakan login kembali.");
         return;
       }
 
       const data = await res.json();
       setOrders(data.orders || []);
       setIsAuthenticated(true);
-      localStorage.setItem("dusk_admin_pin", currentPin);
     } catch {
-      setAuthError("Gagal menghubungi server.");
+      setAuthError("Gagal memuat data pesanan.");
     } finally {
       setLoading(false);
     }
@@ -92,7 +121,7 @@ export default function AdminPage() {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
-          "x-admin-pin": pin,
+          "x-admin-token": authToken,
         },
         body: JSON.stringify({
           orderCode,
@@ -101,7 +130,6 @@ export default function AdminPage() {
       });
 
       if (res.ok) {
-        // Update local state
         setOrders((prev) =>
           prev.map((o) =>
             o.orderCode === orderCode
@@ -118,9 +146,11 @@ export default function AdminPage() {
   };
 
   const handleLogout = () => {
-    localStorage.removeItem("dusk_admin_pin");
+    localStorage.removeItem("dusk_admin_token");
+    localStorage.removeItem("dusk_admin_user");
     setIsAuthenticated(false);
-    setPin("");
+    setAuthToken("");
+    setPassword("");
   };
 
   // Stats
@@ -143,7 +173,7 @@ export default function AdminPage() {
     return true;
   });
 
-  // Login Screen
+  // Login Screen (Username & Password)
   if (!isAuthenticated) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center bg-[#09070f] px-4 py-12">
@@ -154,24 +184,54 @@ export default function AdminPage() {
               Panitia Admin Portal
             </h1>
             <p className="mt-1 text-xs text-[#b4a4c3]">
-              Masukkan PIN Admin untuk verifikasi manual payment &amp; kelola tiket.
+              Login untuk verifikasi bukti transfer manual &amp; kelola tiket.
             </p>
           </div>
 
           <form onSubmit={handleLogin} className="mt-6 space-y-4">
             <div>
               <label className="block text-[11px] font-bold uppercase tracking-wider text-zinc-400">
-                Security PIN (Default: 1212)
+                Username
               </label>
-              <input
-                type="password"
-                required
-                maxLength={6}
-                value={pin}
-                onChange={(e) => setPin(e.target.value)}
-                placeholder="Masukkan PIN"
-                className="mt-1.5 w-full rounded-xl border border-white/20 bg-black/50 px-4 py-3 text-center font-mono text-xl tracking-widest text-white outline-none focus:border-[#ff7a3d]"
-              />
+              <div className="relative mt-1.5">
+                <User className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" />
+                <input
+                  type="text"
+                  required
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  placeholder="Username"
+                  className="w-full rounded-xl border border-white/20 bg-black/50 py-2.5 pl-10 pr-4 text-sm text-white outline-none focus:border-[#ff7a3d]"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-bold uppercase tracking-wider text-zinc-400">
+                Password
+              </label>
+              <div className="relative mt-1.5">
+                <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" />
+                <input
+                  type={showPassword ? "text" : "password"}
+                  required
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Password"
+                  className="w-full rounded-xl border border-white/20 bg-black/50 py-2.5 pl-10 pr-10 text-sm text-white outline-none focus:border-[#ff7a3d]"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-white"
+                >
+                  {showPassword ? (
+                    <EyeOff className="h-4 w-4" />
+                  ) : (
+                    <Eye className="h-4 w-4" />
+                  )}
+                </button>
+              </div>
             </div>
 
             {authError && (
@@ -182,19 +242,19 @@ export default function AdminPage() {
 
             <button
               type="submit"
-              disabled={loading || !pin}
+              disabled={loading || !username || !password}
               className="btn-lift flex w-full items-center justify-center gap-2 rounded-full bg-[#ff7a3d] py-3.5 text-xs font-black uppercase tracking-wider text-[#09070f] hover:bg-[#ff945f] disabled:opacity-40"
             >
-              {loading ? "Checking PIN..." : "Masuk ke Dashboard"}
+              {loading ? "Memverifikasi Akun..." : "Masuk ke Dashboard"}
             </button>
 
             <div className="pt-2 text-center">
-              <a
+              <Link
                 href="/"
                 className="text-xs text-[#ff9e68] hover:underline"
               >
                 ← Kembali ke Website Utama
-              </a>
+              </Link>
             </div>
           </form>
         </div>
@@ -202,7 +262,7 @@ export default function AdminPage() {
     );
   }
 
-  // Admin Dashboard
+  // Admin Dashboard View
   return (
     <div className="min-h-screen bg-[#09070f] text-white">
       {/* Top Header */}
@@ -213,12 +273,15 @@ export default function AdminPage() {
             <span className="rounded-full border border-white/15 bg-white/5 px-2.5 py-0.5 text-[10px] font-extrabold uppercase tracking-widest text-[#ff9e68]">
               Admin Panel
             </span>
+            <span className="hidden sm:inline-block text-xs text-zinc-400">
+              Logged in: <strong className="text-white">@{loggedInUser}</strong>
+            </span>
           </div>
 
           <div className="flex items-center gap-3">
             <button
               type="button"
-              onClick={() => fetchOrders(pin)}
+              onClick={() => fetchOrders(authToken)}
               className="inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-white/5 px-3 py-1.5 text-xs font-semibold hover:border-white/30"
             >
               <RefreshCw
@@ -434,7 +497,6 @@ export default function AdminPage() {
 
                     {/* Right: Payment Proof & Actions */}
                     <div className="flex flex-wrap items-center gap-4">
-                      {/* Bukti Transfer thumbnail button */}
                       {order.paymentProofUrl ? (
                         <button
                           type="button"

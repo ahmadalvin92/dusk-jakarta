@@ -283,7 +283,7 @@ export function EventCheckoutClient({
                 </h2>
               </div>
               <span className="text-xs text-[#b4a4c3]">
-                Total = Harga Tiket × Qty (Tanpa Tax Fee)
+                Total = Harga Tiket × Qty
               </span>
             </div>
 

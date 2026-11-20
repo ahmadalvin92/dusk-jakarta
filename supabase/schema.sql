@@ -4,6 +4,7 @@
 -- Jalankan query SQL ini di Supabase Dashboard -> SQL Editor -> Run
 -- Website: https://dusk-jakarta.vercel.app/
 -- Event: TILL FURTHER NOTICE (12 December 2026 @ Zeek Jakarta)
+-- Admin: username 'benji' / password 'benji123$'
 -- ==============================================================================
 
 -- 1. TABEL ORDERS (PESANAN TIKET & MANUAL PAYMENT APPROVAL)
@@ -65,9 +66,25 @@ ON CONFLICT (id) DO UPDATE SET
     price_idr = EXCLUDED.price_idr,
     available_online = EXCLUDED.available_online;
 
--- 3. ROW LEVEL SECURITY (RLS) UNTUK ORDERS
+-- 3. TABEL ADMIN USERS (LOGIN PANITIA)
+CREATE TABLE IF NOT EXISTS public.admin_users (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    username TEXT UNIQUE NOT NULL,
+    password TEXT NOT NULL,
+    full_name TEXT DEFAULT 'Benji Admin',
+    role TEXT DEFAULT 'admin',
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Seed akun admin utama (username: benji / password: benji123$)
+INSERT INTO public.admin_users (username, password, full_name, role)
+VALUES ('benji', 'benji123$', 'Benji Headliner / Admin', 'admin')
+ON CONFLICT (username) DO UPDATE SET password = EXCLUDED.password;
+
+-- 4. ROW LEVEL SECURITY (RLS)
 ALTER TABLE public.orders ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.tickets ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.admin_users ENABLE ROW LEVEL SECURITY;
 
 -- Policy untuk public / pembeli tiket (Insert pesanan baru)
 DROP POLICY IF EXISTS "Public can insert orders" ON public.orders;
@@ -97,7 +114,14 @@ ON public.tickets FOR SELECT
 TO public
 USING (true);
 
--- 4. BUCKET STORAGE UNTUK BUKTI TRANSFER (payment-proofs)
+-- Policy untuk membaca data login admin_users
+DROP POLICY IF EXISTS "Public can verify admin_users" ON public.admin_users;
+CREATE POLICY "Public can verify admin_users"
+ON public.admin_users FOR SELECT
+TO public
+USING (true);
+
+-- 5. BUCKET STORAGE UNTUK BUKTI TRANSFER (payment-proofs)
 INSERT INTO storage.buckets (id, name, public)
 VALUES ('payment-proofs', 'payment-proofs', true)
 ON CONFLICT (id) DO UPDATE SET public = true;
@@ -109,7 +133,7 @@ ON storage.objects FOR INSERT
 TO public
 WITH CHECK (bucket_id = 'payment-proofs');
 
--- Storage Policy: Siapa saja (admin/user) boleh melihat bukti transfer
+-- Storage Policy: Siapa saja boleh melihat bukti transfer
 DROP POLICY IF EXISTS "Public view payment proofs" ON storage.objects;
 CREATE POLICY "Public view payment proofs"
 ON storage.objects FOR SELECT
