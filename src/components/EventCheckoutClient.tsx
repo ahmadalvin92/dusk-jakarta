@@ -315,6 +315,25 @@ export function EventCheckoutClient({
                 );
               })}
             </div>
+
+            {/* Entry Rules & Late Fee Notice */}
+            <div className="mt-4 rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4 text-xs text-[#d2c5df]">
+              <div className="flex items-start gap-2.5">
+                <Clock className="h-4 w-4 text-[#ff9e68] shrink-0 mt-0.5" />
+                <div className="space-y-1">
+                  <span className="font-bold text-white">
+                    Ketentuan Masuk Gate &amp; Late Fee:
+                  </span>
+                  <p className="text-[11px] leading-relaxed text-[#b4a4c3]">
+                    • <strong className="text-white">Presale 1 &amp; Presale 2:</strong> Max entry pukul <strong className="text-[#ff9e68]">23:30 WIB</strong>.
+                    <br />
+                    • <strong className="text-white">Late Fee:</strong> Kedatangan antara 23:30 - 00:00 WIB dikenakan Late Fee <strong className="text-amber-300">Rp 100.000 / tiket</strong> di pintu masuk.
+                    <br />
+                    • <strong className="text-white">Lewat Pukul 00:00 WIB:</strong> Loket gate beralih ke tiket <strong className="text-white">FDC (First Drink Charge - Rp 300.000)</strong> On The Spot.
+                  </p>
+                </div>
+              </div>
+            </div>
           </div>
 
           {/* Table RSVP WhatsApp Section */}

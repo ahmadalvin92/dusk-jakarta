@@ -95,9 +95,9 @@ export const SEED_EVENTS: DuskEvent[] = [
       {
         id: "tfn-presale-1",
         name: "Presale 1",
-        description: "Single entry pass · Fast-track check-in",
+        description: "Single entry pass · Max entry 23:30 WIB (Late fee Rp 100k s/d 00:00)",
         priceIdr: 150000,
-        maxEntryTime: "23:00 WIB",
+        maxEntryTime: "23:30 WIB",
         bundlePax: 1,
         stock: 100,
         initialStock: 100,
@@ -108,7 +108,7 @@ export const SEED_EVENTS: DuskEvent[] = [
       {
         id: "tfn-presale-2",
         name: "Presale 2",
-        description: "Single entry pass · Valid until late",
+        description: "Single entry pass · Max entry 23:30 WIB (Late fee Rp 100k s/d 00:00)",
         priceIdr: 200000,
         maxEntryTime: "23:30 WIB",
         bundlePax: 1,
@@ -120,7 +120,7 @@ export const SEED_EVENTS: DuskEvent[] = [
       {
         id: "tfn-fdc",
         name: "FDC (First Drink Charge)",
-        description: "Entry on the spot at venue door (Includes 1 Drink Charge)",
+        description: "On the spot entry di venue door mulai pukul 00:00 WIB (Includes 1 Drink Charge)",
         priceIdr: 300000,
         maxEntryTime: "01:30 WIB",
         bundlePax: 1,

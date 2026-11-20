@@ -7,32 +7,28 @@ interface DuskLogoProps {
 }
 
 export function DuskLogo({ className = "", size = "md" }: DuskLogoProps) {
-  const heightPx = size === "sm" ? 28 : size === "lg" ? 44 : 36;
-  const heightClass = size === "sm" ? "h-7" : size === "lg" ? "h-11" : "h-9";
+  // Official composite emblem & typography, enlarged & proportioned
+  const heightClass =
+    size === "sm"
+      ? "h-8 sm:h-9"
+      : size === "lg"
+      ? "h-14 sm:h-16"
+      : "h-10 sm:h-12";
 
   return (
-    <div className={`inline-flex items-center gap-2 select-none ${className}`}>
-      {/* Official DUSK White Logo Emblem */}
-      <div className={`relative ${heightClass} aspect-square shrink-0`}>
+    <div className={`inline-flex items-center select-none ${className}`}>
+      {/* Official DUSK White Logo Emblem (Clean Trimmed) */}
+      <div className={`relative ${heightClass} aspect-[1580/1018] shrink-0`}>
         <Image
-          src="/aset/dusk logo putih.png"
-          alt="DUSK Emblem"
-          width={heightPx}
-          height={heightPx}
-          className="h-full w-full object-contain"
+          src="/aset/dusk-logo-clean.png"
+          alt="DUSK JAKARTA"
+          width={158}
+          height={102}
+          className="h-full w-auto object-contain"
           priority
         />
       </div>
-
-      {/* DUSK Wordmark */}
-      <div className="flex items-baseline">
-        <span className="font-black uppercase tracking-tight text-white text-lg sm:text-xl">
-          dusk
-        </span>
-        <span className="font-serif italic font-bold text-[#ff7a3d] text-xs ml-0.5">
-          jkt
-        </span>
-      </div>
+      <span className="sr-only">DUSK JAKARTA</span>
     </div>
   );
 }

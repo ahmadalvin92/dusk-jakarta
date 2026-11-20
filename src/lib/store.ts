@@ -94,7 +94,7 @@ function mapSupabaseRowToOrder(row: any): TicketOrder {
     unitPriceIdr: Number(row.unit_price_idr),
     serviceFeeIdr: 0,
     totalIdr: Number(row.total_price_idr),
-    maxEntryTime: row.max_entry_time || "23:00 WIB",
+    maxEntryTime: row.max_entry_time || "23:30 WIB",
     paymentMethod: (row.payment_method as TicketOrder["paymentMethod"]) || "MANUAL_TRANSFER",
     paymentStatus: (row.status as OrderPaymentStatus) || "pending",
     paymentProofUrl: row.payment_proof_url || undefined,

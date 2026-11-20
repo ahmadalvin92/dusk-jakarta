@@ -70,13 +70,6 @@ const FLYER_ASSETS: AssetFlyer[] = [
     description: "21+ ID check, smart casual nightlife attire & etiquette",
     src: "/aset/Rules.png",
   },
-  {
-    id: "blank-story",
-    title: "DUSK Story Visual Template",
-    category: "Social Asset",
-    description: "Instagram story overlay for #duskfam",
-    src: "/aset/Blank_Story.png",
-  },
 ];
 
 function useCountdown(targetIso: string) {
@@ -192,42 +185,6 @@ export function HomeClient({ initialEvents }: HomeClientProps) {
               <p className="mt-4 max-w-xl text-sm leading-relaxed text-[#d2c5df] sm:text-base">
                 {heroEvent.description}
               </p>
-
-              {/* Headliners Highlight Box */}
-              <div className="mt-6 rounded-2xl border border-white/15 bg-white/[0.04] p-4 backdrop-blur-md">
-                <span className="text-[10px] font-extrabold uppercase tracking-widest text-[#ff9e68]">
-                  Featuring Headliners
-                </span>
-                <div className="mt-2 flex flex-wrap items-center gap-4">
-                  <a
-                    href="https://instagram.com/nathhbenn_"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="group inline-flex items-center gap-1.5 font-black text-white hover:text-[#ff7a3d]"
-                  >
-                    <span className="text-lg sm:text-xl">BENJI</span>
-                    <span className="text-xs font-normal text-zinc-400 group-hover:text-[#ff9e68]">
-                      @nathhbenn_
-                    </span>
-                    <ExternalLink className="h-3 w-3 text-zinc-500 group-hover:text-[#ff9e68]" />
-                  </a>
-
-                  <span className="text-zinc-600 font-bold">×</span>
-
-                  <a
-                    href="https://instagram.com/mattsrn_"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="group inline-flex items-center gap-1.5 font-black text-white hover:text-[#ff7a3d]"
-                  >
-                    <span className="text-lg sm:text-xl">MATT</span>
-                    <span className="text-xs font-normal text-zinc-400 group-hover:text-[#ff9e68]">
-                      @mattsrn_
-                    </span>
-                    <ExternalLink className="h-3 w-3 text-zinc-500 group-hover:text-[#ff9e68]" />
-                  </a>
-                </div>
-              </div>
 
               {/* Date & Location Pills */}
               <div className="mt-6 flex flex-wrap items-center gap-2.5 text-xs font-semibold text-white/85">
@@ -560,6 +517,34 @@ export function HomeClient({ initialEvents }: HomeClientProps) {
               );
             })}
           </div>
+
+          {/* Ketentuan Masuk & Late Fee Notice Banner */}
+          <div className="mt-6 rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4 sm:p-5 backdrop-blur-md">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-start gap-3">
+                <Clock className="h-5 w-5 text-[#ff9e68] shrink-0 mt-0.5" />
+                <div className="text-xs text-[#d2c5df] space-y-1">
+                  <div className="font-black uppercase tracking-wider text-white text-sm">
+                    Ketentuan Masuk Gate &amp; Late Fee
+                  </div>
+                  <p className="leading-relaxed">
+                    • <strong>Presale 1 &amp; Presale 2:</strong> Batas masuk (Max Entry) pukul <span className="font-bold text-[#ff9e68]">23:30 WIB</span>.
+                    <br />
+                    • <strong>Late Fee:</strong> Keterlambatan kedatangan (23:30 – 00:00 WIB) dikenakan Late Fee <span className="font-bold text-amber-300">Rp 100.000 / tiket</span> di pintu masuk venue.
+                    <br />
+                    • <strong>Lewat Pukul 00:00 WIB:</strong> Loket gate beralih ke tiket <span className="font-bold text-white">FDC (Rp 300.000 On The Spot)</span>.
+                  </p>
+                </div>
+              </div>
+              <Link
+                href={`/events/${heroEvent.slug}`}
+                className="btn-lift inline-flex items-center justify-center gap-1.5 rounded-full bg-[#ff7a3d] px-5 py-2.5 text-xs font-black uppercase tracking-wider text-[#09070f] shrink-0 self-start sm:self-center hover:bg-[#ff945f]"
+              >
+                Pesan Tiket Sekarang
+                <ArrowUpRight className="h-3.5 w-3.5" />
+              </Link>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -660,7 +645,7 @@ export function HomeClient({ initialEvents }: HomeClientProps) {
                   className="btn-lift inline-flex items-center gap-2 rounded-full bg-emerald-500 px-6 py-4 text-xs font-black uppercase tracking-wider text-[#09070f] shadow-[0_10px_35px_rgba(16,185,129,0.3)] hover:bg-emerald-400"
                 >
                   <MessageCircle className="h-4 w-4" />
-                  RSVP Table WhatsApp (+62 815-8686-8200)
+                  RSVP Table WhatsApp ({SITE_CONFIG.tableRsvpWhatsappDisplay})
                 </a>
 
                 <button

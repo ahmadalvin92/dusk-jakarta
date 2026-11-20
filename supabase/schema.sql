@@ -22,7 +22,7 @@ CREATE TABLE IF NOT EXISTS public.orders (
     pax_count INTEGER NOT NULL DEFAULT 1,
     unit_price_idr NUMERIC NOT NULL,
     total_price_idr NUMERIC NOT NULL,
-    max_entry_time TEXT DEFAULT '23:00 WIB',
+    max_entry_time TEXT DEFAULT '23:30 WIB',
     status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
     full_name TEXT NOT NULL,
     email TEXT NOT NULL,
@@ -59,9 +59,9 @@ CREATE TABLE IF NOT EXISTS public.tickets (
 -- Seed data tiket default (12.12.2026)
 INSERT INTO public.tickets (id, event_slug, name, description, price_idr, max_entry_time, bundle_pax, stock, available_online)
 VALUES
-    ('tfn-presale-1', 'till-further-notice', 'Presale 1', 'Single entry pass · Doors open 21:30 WIB', 150000, '23:00 WIB', 1, 100, true),
-    ('tfn-presale-2', 'till-further-notice', 'Presale 2', 'Single entry pass · Valid until late', 200000, '23:30 WIB', 1, 150, true),
-    ('tfn-fdc', 'till-further-notice', 'FDC (First Drink Charge)', 'On the spot entry at venue door (Includes 1 drink)', 300000, '01:30 WIB', 1, 0, false)
+    ('tfn-presale-1', 'till-further-notice', 'Presale 1', 'Single entry pass · Max entry 23:30 WIB (Late fee Rp 100k s/d 00:00)', 150000, '23:30 WIB', 1, 100, true),
+    ('tfn-presale-2', 'till-further-notice', 'Presale 2', 'Single entry pass · Max entry 23:30 WIB (Late fee Rp 100k s/d 00:00)', 200000, '23:30 WIB', 1, 150, true),
+    ('tfn-fdc', 'till-further-notice', 'FDC (First Drink Charge)', 'On the spot entry di venue door mulai pukul 00:00 WIB (Includes 1 Drink Charge)', 300000, '01:30 WIB', 1, 0, false)
 ON CONFLICT (id) DO UPDATE SET
     price_idr = EXCLUDED.price_idr,
     available_online = EXCLUDED.available_online;
