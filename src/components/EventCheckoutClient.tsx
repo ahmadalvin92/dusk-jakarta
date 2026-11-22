@@ -51,6 +51,7 @@ export function EventCheckoutClient({
     whatsapp: "",
     gender: "Prefer not to say",
     followedDusk: false,
+    prName: "",
   });
 
   const [submitting, setSubmitting] = useState(false);
@@ -132,13 +133,16 @@ export function EventCheckoutClient({
       }
 
       // Buat pesan WhatsApp otomatis untuk panitia
+      const prText = guest.prName?.trim()
+        ? `\nNama PR: ${guest.prName.trim()}`
+        : "";
       const waMsg = `Halo Panitia DUSK JAKARTA, saya telah melakukan transfer sebesar ${formatIdr(
         total
       )} ke BCA Nathaniel Bennett untuk pesanan tiket ${event.title} (${
         selectedTier.name
       } - ${safeQty} tiket).\n\nOrder Code: ${orderData.order.orderCode}\nNama: ${
         guest.fullName
-      }\nInstagram: ${guest.instagramHandle}\n\nBerikut foto bukti transfer saya:`;
+      }\nInstagram: ${guest.instagramHandle}${prText}\n\nBerikut foto bukti transfer saya:`;
 
       const waUrl = buildWhatsappUrl(waMsg, SITE_CONFIG.whatsappNumber);
 
@@ -493,6 +497,30 @@ export function EventCheckoutClient({
                   placeholder="@username_anda"
                   className="mt-1 w-full rounded-xl border border-white/15 bg-black/40 px-3.5 py-2.5 text-xs text-white placeholder-zinc-500 outline-none focus:border-[#ff7a3d]"
                 />
+              </div>
+
+              {/* PR / Promoter Referral (Opsional) */}
+              <div>
+                <div className="flex items-center justify-between">
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-[#b4a4c3]">
+                    Nama PR / Referral
+                  </label>
+                  <span className="rounded-full bg-white/10 px-2 py-0.5 text-[9px] font-extrabold uppercase tracking-wider text-zinc-400">
+                    Opsional
+                  </span>
+                </div>
+                <input
+                  type="text"
+                  value={guest.prName || ""}
+                  onChange={(e) =>
+                    setGuest({ ...guest, prName: e.target.value })
+                  }
+                  placeholder="Nama PR yang mengundang (opsional)"
+                  className="mt-1 w-full rounded-xl border border-white/15 bg-black/40 px-3.5 py-2.5 text-xs text-white placeholder-zinc-500 outline-none focus:border-[#ff7a3d]"
+                />
+                <p className="mt-1 text-[10px] text-zinc-500">
+                  Isi jika Anda diundang atau direferensikan oleh PR / tim DUSK.
+                </p>
               </div>
 
               {/* Verify Follow IG */}

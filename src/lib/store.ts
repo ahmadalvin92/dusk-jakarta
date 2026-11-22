@@ -80,42 +80,49 @@ export interface CreateOrderInput {
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapSupabaseRowToOrder(row: any): TicketOrder {
-  return {
-    orderCode: row.order_code,
-    eventSlug: row.event_slug,
-    eventTitle: row.event_title,
-    eventDateLabel: row.event_date_label || "Sat, 12 Dec 2026",
-    venue: row.venue || "Zeek Jakarta",
-    venueAddress: row.venue_address || "Jl. Suryo No. 15, Kebayoran Baru, Jakarta Selatan",
-    tierId: row.tier_id,
-    tierName: row.tier_name,
-    quantity: Number(row.quantity) || 1,
-    paxCount: Number(row.pax_count) || 1,
-    unitPriceIdr: Number(row.unit_price_idr),
-    serviceFeeIdr: 0,
-    totalIdr: Number(row.total_price_idr),
-    maxEntryTime: row.max_entry_time || "23:30 WIB",
-    paymentMethod: (row.payment_method as TicketOrder["paymentMethod"]) || "MANUAL_TRANSFER",
-    paymentStatus: (row.status as OrderPaymentStatus) || "pending",
-    paymentProofUrl: row.payment_proof_url || undefined,
-    adminNotes: row.admin_notes || undefined,
-    guest: {
-      fullName: row.full_name,
-      instagramHandle: row.instagram_handle,
-      email: row.email,
-      whatsapp: row.whatsapp,
-      gender: row.gender || "Prefer not to say",
-      followedDusk: true,
-    },
-    qrPayload: row.qr_payload,
-    isDeleted:
-      Boolean(row.is_deleted) ||
-      (typeof row.admin_notes === "string" && row.admin_notes.includes("[DELETED]")),
-    deletedAt: row.deleted_at || undefined,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-  };
-}
+    const prFromNotes =
+      typeof row.admin_notes === "string"
+        ? row.admin_notes.match(/\[PR:\s*([^\]]+)\]/i)?.[1]?.trim()
+        : undefined;
+    const prName = row.pr_name || prFromNotes || undefined;
+
+    return {
+      orderCode: row.order_code,
+      eventSlug: row.event_slug,
+      eventTitle: row.event_title,
+      eventDateLabel: row.event_date_label || "Sat, 12 Dec 2026",
+      venue: row.venue || "Zeek Jakarta",
+      venueAddress: row.venue_address || "Jl. Suryo No. 15, Kebayoran Baru, Jakarta Selatan",
+      tierId: row.tier_id,
+      tierName: row.tier_name,
+      quantity: Number(row.quantity) || 1,
+      paxCount: Number(row.pax_count) || 1,
+      unitPriceIdr: Number(row.unit_price_idr),
+      serviceFeeIdr: 0,
+      totalIdr: Number(row.total_price_idr),
+      maxEntryTime: row.max_entry_time || "23:30 WIB",
+      paymentMethod: (row.payment_method as TicketOrder["paymentMethod"]) || "MANUAL_TRANSFER",
+      paymentStatus: (row.status as OrderPaymentStatus) || "pending",
+      paymentProofUrl: row.payment_proof_url || undefined,
+      adminNotes: row.admin_notes || undefined,
+      guest: {
+        fullName: row.full_name,
+        instagramHandle: row.instagram_handle,
+        email: row.email,
+        whatsapp: row.whatsapp,
+        gender: row.gender || "Prefer not to say",
+        followedDusk: true,
+        prName,
+      },
+      qrPayload: row.qr_payload,
+      isDeleted:
+        Boolean(row.is_deleted) ||
+        (typeof row.admin_notes === "string" && row.admin_notes.includes("[DELETED]")),
+      deletedAt: row.deleted_at || undefined,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    };
+  }
 
 export async function createTicketOrder(
   input: CreateOrderInput
@@ -182,41 +189,48 @@ export async function createTicketOrder(
 
   const nowISO = new Date().toISOString();
 
-  const newOrder: TicketOrder = {
-    orderCode,
-    eventSlug: baseEvent.slug,
-    eventTitle: baseEvent.title,
-    eventDateLabel: baseEvent.dateLabel,
-    venue: baseEvent.venue,
-    venueAddress: baseEvent.venueAddress,
-    tierId: tier.id,
-    tierName: tier.name,
-    quantity: qty,
-    paxCount,
-    unitPriceIdr: tier.priceIdr,
-    serviceFeeIdr,
-    totalIdr,
-    maxEntryTime: tier.maxEntryTime,
-    paymentMethod: input.paymentMethod || "MANUAL_TRANSFER",
-    paymentStatus: "pending",
-    paymentProofUrl: input.paymentProofUrl || undefined,
-    guest: {
-      fullName: guest.fullName.trim(),
-      instagramHandle: cleanHandle,
-      email: guest.email.trim(),
-      whatsapp: guest.whatsapp.trim(),
-      gender: guest.gender || "Prefer not to say",
-      followedDusk: true,
-    },
-    qrPayload,
-    createdAt: nowISO,
-    updatedAt: nowISO,
-  };
+    const cleanPrName = guest.prName?.trim() || undefined;
+    const adminNotes = cleanPrName
+      ? `[PR: ${cleanPrName}]${input.paymentProofUrl ? ` (Proof attached)` : ""}`
+      : undefined;
 
-  // 1. Simpan ke Supabase Database
-  try {
-    const { error: sbError } = await supabase.from("orders").insert([
-      {
+    const newOrder: TicketOrder = {
+      orderCode,
+      eventSlug: baseEvent.slug,
+      eventTitle: baseEvent.title,
+      eventDateLabel: baseEvent.dateLabel,
+      venue: baseEvent.venue,
+      venueAddress: baseEvent.venueAddress,
+      tierId: tier.id,
+      tierName: tier.name,
+      quantity: qty,
+      paxCount,
+      unitPriceIdr: tier.priceIdr,
+      serviceFeeIdr,
+      totalIdr,
+      maxEntryTime: tier.maxEntryTime,
+      paymentMethod: input.paymentMethod || "MANUAL_TRANSFER",
+      paymentStatus: "pending",
+      paymentProofUrl: input.paymentProofUrl || undefined,
+      adminNotes,
+      guest: {
+        fullName: guest.fullName.trim(),
+        instagramHandle: cleanHandle,
+        email: guest.email.trim(),
+        whatsapp: guest.whatsapp.trim(),
+        gender: guest.gender || "Prefer not to say",
+        followedDusk: true,
+        prName: cleanPrName,
+      },
+      qrPayload,
+      createdAt: nowISO,
+      updatedAt: nowISO,
+    };
+
+    // 1. Simpan ke Supabase Database
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const insertPayload: Record<string, any> = {
         order_code: orderCode,
         event_slug: baseEvent.slug,
         event_title: baseEvent.title,
@@ -238,18 +252,28 @@ export async function createTicketOrder(
         gender: guest.gender || "Prefer not to say",
         payment_method: input.paymentMethod || "MANUAL_TRANSFER",
         payment_proof_url: input.paymentProofUrl || null,
+        admin_notes: adminNotes || null,
+        pr_name: cleanPrName || null,
         qr_payload: qrPayload,
         created_at: nowISO,
         updated_at: nowISO,
-      },
-    ]);
+      };
 
-    if (sbError) {
-      console.warn("Supabase insert warning:", sbError.message);
+      let { error: sbError } = await supabase.from("orders").insert([insertPayload]);
+
+      // If database does not yet have pr_name column, retry insert without pr_name
+      if (sbError && sbError.message && sbError.message.includes("pr_name")) {
+        delete insertPayload.pr_name;
+        const retry = await supabase.from("orders").insert([insertPayload]);
+        sbError = retry.error;
+      }
+
+      if (sbError) {
+        console.warn("Supabase insert warning:", sbError.message);
+      }
+    } catch (err) {
+      console.warn("Supabase connection fallback to local store:", err);
     }
-  } catch (err) {
-    console.warn("Supabase connection fallback to local store:", err);
-  }
 
   // 2. Simpan juga ke local fallback store
   const state = loadLocalStore();

@@ -295,6 +295,7 @@ export function DigitalPassClient({ order: initialOrder }: DigitalPassClientProp
               <User className="h-4 w-4 shrink-0 text-[#ff9e68]" />
               <span>
                 {order.guest.fullName} ({order.guest.instagramHandle})
+                {order.guest.prName && ` · PR: ${order.guest.prName}`}
               </span>
             </div>
           </div>

@@ -375,7 +375,8 @@ export default function AdminPage() {
       const matchCode = o.orderCode.toLowerCase().includes(q);
       const matchWa = o.guest.whatsapp.toLowerCase().includes(q);
       const matchIg = o.guest.instagramHandle.toLowerCase().includes(q);
-      return matchName || matchCode || matchWa || matchIg;
+      const matchPr = o.guest.prName?.toLowerCase().includes(q);
+      return matchName || matchCode || matchWa || matchIg || Boolean(matchPr);
     }
     return true;
   });
@@ -613,6 +614,14 @@ export default function AdminPage() {
                       </span>
                       <span>·</span>
                       <span>Kode: {scanResult.order.orderCode}</span>
+                      {scanResult.order.guest.prName && (
+                        <>
+                          <span>·</span>
+                          <span className="text-purple-300 font-bold">
+                            PR: {scanResult.order.guest.prName}
+                          </span>
+                        </>
+                      )}
                     </div>
                   )}
                 </div>
@@ -762,6 +771,11 @@ export default function AdminPage() {
                         <span className="text-zinc-400">
                           {order.guest.email}
                         </span>
+                        {order.guest.prName && (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-purple-500/15 border border-purple-500/30 px-2.5 py-0.5 text-[11px] font-bold text-purple-300">
+                            PR: {order.guest.prName}
+                          </span>
+                        )}
                       </div>
 
                       {/* Ticket Tier & Total */}
@@ -974,6 +988,11 @@ export default function AdminPage() {
                     <div className="text-[#ff9e68] font-mono">
                       {selectedPrintOrder.guest.instagramHandle}
                     </div>
+                    {selectedPrintOrder.guest.prName && (
+                      <div className="mt-1 text-[11px] text-purple-300 font-semibold">
+                        PR / Referral: {selectedPrintOrder.guest.prName}
+                      </div>
+                    )}
                   </div>
 
                   <div>

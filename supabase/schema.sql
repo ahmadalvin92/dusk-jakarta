@@ -28,6 +28,7 @@ CREATE TABLE IF NOT EXISTS public.orders (
     email TEXT NOT NULL,
     whatsapp TEXT NOT NULL,
     instagram_handle TEXT NOT NULL,
+    pr_name TEXT,
     gender TEXT DEFAULT 'Prefer not to say',
     payment_method TEXT DEFAULT 'MANUAL_TRANSFER',
     payment_proof_url TEXT,
@@ -147,9 +148,11 @@ TO public
 USING (bucket_id = 'payment-proofs');
 
 -- ==============================================================================
--- 6. RECYCLE BIN SUPPORT (SOFT DELETE & RECOVER)
+-- 6. RECYCLE BIN & PR REFERRAL SUPPORT
 -- ==============================================================================
 ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN DEFAULT FALSE;
 ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS pr_name TEXT;
 CREATE INDEX IF NOT EXISTS idx_orders_is_deleted ON public.orders(is_deleted);
+CREATE INDEX IF NOT EXISTS idx_orders_pr_name ON public.orders(pr_name);
 

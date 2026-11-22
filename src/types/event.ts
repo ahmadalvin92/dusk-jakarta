@@ -69,6 +69,7 @@ export interface GuestRegistration {
   gender?: "Male" | "Female" | "Prefer not to say";
   followedDusk: boolean;
   referral?: string;
+  prName?: string;
 }
 
 export type OrderPaymentStatus = "pending" | "approved" | "rejected";
