@@ -24,7 +24,11 @@ import {
 } from "lucide-react";
 import { TicketOrder } from "@/types/event";
 import { formatIdr } from "@/data/events";
-import { buildWhatsappUrl, SITE_CONFIG } from "@/data/site";
+import {
+  buildWhatsappUrl,
+  SITE_CONFIG,
+  stripInternalAdminNotes,
+} from "@/data/site";
 import { DuskLogo } from "./DuskLogo";
 
 interface DigitalPassClientProps {
@@ -48,7 +52,11 @@ export function DigitalPassClient({ order: initialOrder }: DigitalPassClientProp
         });
         if (!res.ok) return;
         const data = await res.json();
-        if (data.order && data.order.paymentStatus !== order.paymentStatus) {
+        if (
+          data.order &&
+          (data.order.paymentStatus !== order.paymentStatus ||
+            Boolean(data.order.isDeleted) !== Boolean(order.isDeleted))
+        ) {
           setOrder(data.order);
         }
       } catch {
@@ -108,7 +116,15 @@ export function DigitalPassClient({ order: initialOrder }: DigitalPassClientProp
     link.click();
   };
 
-  const waApprovalMessage = `Halo tim DUSK JAKARTA, saya telah menyelesaikan transfer manual untuk tiket ${order.eventTitle} (${order.tierName} - ${order.quantity} tiket) dengan Order Code: ${order.orderCode}. Mohon diverifikasi agar Digital Pass saya aktif. Terima kasih!`;
+  const prLine = order.guest.prName ? `\nNama PR: ${order.guest.prName}` : "";
+  const waApprovalMessage = `Halo tim DUSK JAKARTA, saya telah menyelesaikan transfer manual sebesar ${formatIdr(
+    order.totalIdr
+  )} untuk tiket ${order.eventTitle} (${order.tierName} - ${
+    order.quantity
+  } tiket).\n\nOrder Code: ${order.orderCode}\nNama: ${
+    order.guest.fullName
+  }\nInstagram: ${order.guest.instagramHandle}${prLine}\n\nMohon diverifikasi agar Digital Pass saya aktif. Terima kasih!`;
+  const cleanAdminNotes = stripInternalAdminNotes(order.adminNotes);
 
   return (
     <main className="mx-auto max-w-2xl px-4 py-10 sm:px-6 sm:py-14">
@@ -218,7 +234,7 @@ export function DigitalPassClient({ order: initialOrder }: DigitalPassClientProp
                 Pesanan Ditolak / Tidak Terverifikasi
               </h4>
               <p className="mt-1 text-xs text-rose-200">
-                {order.adminNotes ||
+                {cleanAdminNotes ||
                   "Bukti transfer tidak sesuai atau dana belum masuk ke rekening kami. Silakan hubungi admin panitia untuk konfirmasi ulang."}
               </p>
               <a
@@ -398,11 +414,11 @@ export function DigitalPassClient({ order: initialOrder }: DigitalPassClientProp
                 </div>
               )}
 
-              {order.paymentStatus === "approved" && (
+              {order.paymentStatus === "approved" && !order.isDeleted && (
                 <button
                   type="button"
                   onClick={handleDownloadQr}
-                  className="btn-lift inline-flex items-center justify-center gap-2 rounded-full bg-[#ff7a3d] px-4 py-2.5 text-xs font-black uppercase tracking-wider text-[#09070f]"
+                  className="btn-lift inline-flex items-center justify-center gap-2 rounded-full bg-[#ff7a3d] px-4 py-2.5 text-xs font-black uppercase tracking-wider text-[#09070f] print:hidden"
                 >
                   <Download className="h-3.5 w-3.5" />
                   Download QR Code

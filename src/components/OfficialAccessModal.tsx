@@ -4,7 +4,7 @@ import React, { useEffect } from "react";
 import Link from "next/link";
 import { ArrowUpRight, MessageCircle, Ticket, X } from "lucide-react";
 import { DuskEvent } from "@/types/event";
-import { buildWhatsappUrl } from "@/data/site";
+import { buildWhatsappUrl, SITE_CONFIG } from "@/data/site";
 
 interface OfficialAccessModalProps {
   event: DuskEvent | null;
@@ -88,7 +88,7 @@ export function OfficialAccessModal({
 
           {/* Path 2: Table RSVP via WhatsApp */}
           <a
-            href={buildWhatsappUrl(rsvpMessage)}
+            href={buildWhatsappUrl(rsvpMessage, SITE_CONFIG.tableRsvpWhatsapp)}
             target="_blank"
             rel="noopener noreferrer"
             className="btn-lift flex w-full items-center justify-between rounded-2xl border border-white/15 bg-white/[0.04] p-4 text-white hover:border-[#ff9e68]/45 hover:bg-white/[0.07]"

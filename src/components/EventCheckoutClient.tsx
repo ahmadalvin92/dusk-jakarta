@@ -1,15 +1,13 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import Link from "next/link";
-import Image from "next/image";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
   ArrowUpRight,
   Calendar,
   Check,
-  CheckCircle2,
   Clock,
   Copy,
   CreditCard,
@@ -19,11 +17,16 @@ import {
   Minus,
   Plus,
   ShieldCheck,
-  Users,
 } from "lucide-react";
 import { DuskEvent, GuestRegistration, TicketTier } from "@/types/event";
 import { formatIdr } from "@/data/events";
-import { buildTableRsvpUrl, buildWhatsappUrl, SITE_CONFIG } from "@/data/site";
+import {
+  buildTableRsvpUrl,
+  buildWhatsappUrl,
+  isValidEmail,
+  isValidWhatsappNumber,
+  SITE_CONFIG,
+} from "@/data/site";
 
 interface EventCheckoutClientProps {
   initialEvent: DuskEvent;
@@ -33,13 +36,65 @@ export function EventCheckoutClient({
   initialEvent,
 }: EventCheckoutClientProps) {
   const router = useRouter();
-  const event = initialEvent;
+  const [event, setEvent] = useState<DuskEvent>(initialEvent);
 
-  // Pilih default tier yang tersedia online
+  // Pilih default tier yang tersedia online & stok > 0
   const [selectedTierId, setSelectedTierId] = useState<string>(() => {
-    const firstOnline = event.tiers.find((t) => t.availableOnline !== false);
-    return firstOnline?.id ?? event.tiers[0]?.id ?? "";
+    const firstOnline = initialEvent.tiers.find(
+      (t) => t.availableOnline !== false && t.stock > 0
+    );
+    return firstOnline?.id ?? initialEvent.tiers[0]?.id ?? "";
   });
+
+  // Sync event prop changes and live tier updates across Next.js Activity navigations
+  useEffect(() => {
+    setEvent(initialEvent);
+  }, [initialEvent]);
+
+  useEffect(() => {
+    let active = true;
+    const syncLiveEvent = async () => {
+      try {
+        const res = await fetch(`/api/events/${initialEvent.slug}`, {
+          cache: "no-store",
+        });
+        if (!res.ok) return;
+        const data = (await res.json()) as { event?: DuskEvent };
+        if (active && data.event) {
+          setEvent(data.event);
+        }
+      } catch {
+        // Keep initial event on network failure
+      }
+    };
+    syncLiveEvent();
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        syncLiveEvent();
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => {
+      active = false;
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, [initialEvent.slug]);
+
+  // Auto-switch selectedTierId if selected tier becomes closed or sold out
+  useEffect(() => {
+    const current = event.tiers.find((t) => t.id === selectedTierId);
+    const currentOpen =
+      current && current.availableOnline !== false && current.stock > 0;
+    if (!currentOpen) {
+      const firstOpen = event.tiers.find(
+        (t) => t.availableOnline !== false && t.stock > 0
+      );
+      if (firstOpen && firstOpen.id !== selectedTierId) {
+        setSelectedTierId(firstOpen.id);
+      }
+    }
+  }, [event.tiers, selectedTierId]);
 
   const [quantity, setQuantity] = useState<number>(1);
   const [copiedAccount, setCopiedAccount] = useState(false);
@@ -62,9 +117,26 @@ export function EventCheckoutClient({
     (t) => t.id === selectedTierId
   );
 
-  const isTierAvailable = selectedTier && selectedTier.availableOnline !== false;
-  const maxQty = selectedTier ? Math.min(10, Math.max(1, selectedTier.stock)) : 1;
+  const isTierAvailable = Boolean(
+    selectedTier &&
+      selectedTier.availableOnline !== false &&
+      selectedTier.stock > 0
+  );
+  const hasAnyOnlineTier = event.tiers.some(
+    (t) => t.availableOnline !== false && t.stock > 0
+  );
+  const maxQty =
+    isTierAvailable && selectedTier ? Math.min(10, selectedTier.stock) : 1;
   const safeQty = Math.min(quantity, maxQty);
+
+  const presaleTiers = event.tiers.filter((t) => !t.id.includes("fdc"));
+  const openPresales = presaleTiers.filter(
+    (t) => t.availableOnline !== false && t.stock > 0
+  );
+  const closedPresales = presaleTiers.filter(
+    (t) => t.availableOnline === false || t.stock <= 0
+  );
+  const fdcTier = event.tiers.find((t) => t.id.includes("fdc"));
 
   // Murni harga tiket * qty (Tanpa biaya admin / tax)
   const subtotal = selectedTier ? selectedTier.priceIdr * safeQty : 0;
@@ -90,8 +162,8 @@ export function EventCheckoutClient({
     e.preventDefault();
     setErrorMsg(null);
 
-    if (!selectedTier || selectedTier.availableOnline === false) {
-      setErrorMsg("Kategori tiket ini tidak dapat dibeli online.");
+    if (!selectedTier || selectedTier.availableOnline === false || selectedTier.stock <= 0) {
+      setErrorMsg("Kategori tiket ini sedang ditutup atau sudah habis.");
       return;
     }
 
@@ -102,6 +174,16 @@ export function EventCheckoutClient({
       !guest.whatsapp.trim()
     ) {
       setErrorMsg("Mohon lengkapi seluruh field data diri pembeli.");
+      return;
+    }
+
+    if (!isValidEmail(guest.email)) {
+      setErrorMsg("Format alamat email tidak valid.");
+      return;
+    }
+
+    if (!isValidWhatsappNumber(guest.whatsapp)) {
+      setErrorMsg("Nomor WhatsApp tidak valid (masukkan 8-15 digit angka).");
       return;
     }
 
@@ -258,7 +340,8 @@ export function EventCheckoutClient({
             <div className="mt-4 space-y-3.5">
               {event.tiers.map((tier) => {
                 const isSelected = tier.id === selectedTierId;
-                const isOnline = tier.availableOnline !== false;
+                const isFdc = tier.id.includes("fdc");
+                const isOnline = tier.availableOnline !== false && tier.stock > 0;
 
                 return (
                   <div
@@ -305,16 +388,22 @@ export function EventCheckoutClient({
                           {formatIdr(tier.priceIdr)}
                         </div>
                         <span className="text-[10px] uppercase tracking-wider text-zinc-400">
-                          {isOnline ? "Per Person" : "On The Spot Only"}
+                          {isOnline
+                            ? "Per Person"
+                            : isFdc
+                            ? "On The Spot Only"
+                            : "Closed / Sold Out"}
                         </span>
                       </div>
                     </div>
 
                     {!isOnline && (
                       <div className="mt-3 rounded-lg bg-zinc-900/80 px-3 py-1.5 text-xs text-amber-300 border border-amber-500/20">
-                        {tier.id === "tfn-presale-2"
-                          ? "🔒 Penjualan Presale 2 saat ini ditutup sementara."
-                          : "⚠️ Tiket FDC tidak dijual online. Tersedia langsung di pintu masuk venue mulai 00:00 WIB (bebas masuk tanpa batas jam)."}
+                        {isFdc
+                          ? "⚠️ Tiket FDC tidak dijual online. Tersedia langsung di pintu masuk venue mulai 00:00 WIB (bebas masuk tanpa batas jam)."
+                          : tier.availableOnline !== false && tier.stock <= 0
+                          ? `🔒 Kuota ${tier.name} telah habis terjual (Sold Out).`
+                          : `🔒 Penjualan ${tier.name} saat ini ditutup.`}
                       </div>
                     )}
                   </div>
@@ -331,11 +420,21 @@ export function EventCheckoutClient({
                     Ketentuan Masuk Gate &amp; Late Fee:
                   </span>
                   <p className="text-[11px] leading-relaxed text-[#b4a4c3]">
-                    • <strong className="text-white">Presale 1:</strong> Max entry pukul <strong className="text-[#ff9e68]">23:30 WIB</strong> (Presale 2 saat ini ditutup sementara).
+                    •{" "}
+                    <strong className="text-white">
+                      {openPresales.length > 0
+                        ? openPresales.map((t) => t.name).join(" & ")
+                        : "Presale"}
+                      :
+                    </strong>{" "}
+                    Max entry pukul <strong className="text-[#ff9e68]">23:30 WIB</strong>
+                    {closedPresales.length > 0 &&
+                      ` (${closedPresales.map((t) => t.name).join(" & ")} saat ini ditutup)`}
+                    .
                     <br />
                     • <strong className="text-white">Late Fee:</strong> Kedatangan tiket Presale antara 23:30 - 00:00 WIB dikenakan Late Fee <strong className="text-amber-300">Rp 100.000 / tiket</strong> di pintu masuk.
                     <br />
-                    • <strong className="text-white">Mulai Pukul 00:00 WIB:</strong> Akses gate beralih ke tiket <strong className="text-white">FDC (First Drink Charge - Rp 300.000)</strong> On The Spot tanpa batas jam masuk (bebas masuk hingga acara selesai).
+                    • <strong className="text-white">Mulai Pukul 00:00 WIB:</strong> Akses gate beralih ke tiket <strong className="text-white">FDC ({formatIdr(fdcTier?.priceIdr ?? 300000)})</strong> On The Spot tanpa batas jam masuk (bebas masuk hingga acara selesai).
                   </p>
                 </div>
               </div>
@@ -380,6 +479,15 @@ export function EventCheckoutClient({
                 Checkout &amp; Payment
               </h2>
             </div>
+
+            {!hasAnyOnlineTier && (
+              <div className="mt-4 rounded-2xl border border-amber-500/40 bg-amber-500/10 p-4 text-xs text-amber-200 leading-relaxed">
+                <strong className="block uppercase text-amber-300 mb-1">
+                  Penjualan Online Sedang Ditutup
+                </strong>
+                Semua kategori Presale saat ini sudah habis atau ditutup sementara. Tiket FDC ({formatIdr(fdcTier?.priceIdr ?? 300000)}) tersedia langsung On The Spot di pintu masuk venue, atau hubungi WhatsApp untuk VIP Table RSVP.
+              </div>
+            )}
 
             {/* Selected Tier & Quantity */}
             <div className="mt-5 rounded-2xl border border-white/10 bg-white/[0.03] p-4">

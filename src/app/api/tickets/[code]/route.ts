@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server";
+import { connection } from "next/server";
 import { getTicketOrderByCode } from "@/lib/store";
 
 export async function GET(
   _request: Request,
   context: { params: Promise<{ code: string }> }
 ) {
+  await connection();
   try {
     const { code } = await context.params;
     const order = await getTicketOrderByCode(code);

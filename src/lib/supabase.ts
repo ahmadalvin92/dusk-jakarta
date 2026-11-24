@@ -15,10 +15,14 @@ export const isSupabaseConfigured = Boolean(
 
 /**
  * Supabase client for browser and server actions.
+ * Disable Next.js fetch cache so reads/writes reflect live state.
  */
 export const supabase = createClient(supabaseUrl, supabaseKey, {
   auth: {
     persistSession: false,
     autoRefreshToken: false,
+  },
+  global: {
+    fetch: (url, options) => fetch(url, { ...options, cache: "no-store" }),
   },
 });

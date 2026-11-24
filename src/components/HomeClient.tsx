@@ -123,10 +123,35 @@ export function HomeClient({ initialEvents }: HomeClientProps) {
     [initialEvents]
   );
 
+  const activeOnlineTier = useMemo(
+    () =>
+      heroEvent.tiers.find((t) => t.availableOnline !== false && t.stock > 0),
+    [heroEvent.tiers]
+  );
+  const fdcTier = useMemo(
+    () => heroEvent.tiers.find((t) => t.id.includes("fdc")),
+    [heroEvent.tiers]
+  );
+  const presaleTiers = useMemo(
+    () => heroEvent.tiers.filter((t) => !t.id.includes("fdc")),
+    [heroEvent.tiers]
+  );
+  const openPresales = useMemo(
+    () => presaleTiers.filter((t) => t.availableOnline !== false && t.stock > 0),
+    [presaleTiers]
+  );
+  const closedPresales = useMemo(
+    () => presaleTiers.filter((t) => t.availableOnline === false || t.stock <= 0),
+    [presaleTiers]
+  );
+
   return (
     <main>
       {/* 1. HERO SHOWCASE WITH OFFICIAL EVENT FLYER */}
-      <section className="mx-auto max-w-6xl px-4 pt-5 sm:px-6 sm:pt-8">
+      <section
+        id="events"
+        className="mx-auto max-w-6xl px-4 pt-5 sm:px-6 sm:pt-8 scroll-mt-24"
+      >
         <div className="relative overflow-hidden rounded-3xl border border-white/15 bg-[#120a14] p-6 sm:p-10 md:p-12 shadow-[0_28px_90px_rgba(0,0,0,0.85)]">
           {/* Animated Ambient Backdrop */}
           <div className="pointer-events-none absolute inset-0 overflow-hidden">
@@ -196,10 +221,17 @@ export function HomeClient({ initialEvents }: HomeClientProps) {
                   <MapPin className="h-3.5 w-3.5 text-[#ff9e68]" />
                   {heroEvent.venue}
                 </span>
-                <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-400/30 bg-emerald-400/10 px-3.5 py-1.5 text-emerald-300">
-                  <Banknote className="h-3.5 w-3.5 text-emerald-400" />
-                  Presale 1: Rp 150.000
-                </span>
+                {activeOnlineTier ? (
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-400/30 bg-emerald-400/10 px-3.5 py-1.5 text-emerald-300">
+                    <Banknote className="h-3.5 w-3.5 text-emerald-400" />
+                    {activeOnlineTier.name}: {formatIdr(activeOnlineTier.priceIdr)}
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-400/30 bg-amber-400/10 px-3.5 py-1.5 text-amber-300">
+                    <Banknote className="h-3.5 w-3.5 text-amber-400" />
+                    On The Spot (FDC): {formatIdr(fdcTier?.priceIdr ?? 300000)}
+                  </span>
+                )}
               </div>
 
               {/* Live Event Countdown Timer */}
@@ -327,7 +359,7 @@ export function HomeClient({ initialEvents }: HomeClientProps) {
       </section>
 
       {/* 2. OFFICIAL LINEUP SECTION */}
-      <section id="lineup" className="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-20">
+      <section id="lineup" className="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-20 scroll-mt-20">
         <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
           <div>
             <p className="kicker">Curated Artists &amp; Hosts</p>
@@ -416,7 +448,7 @@ export function HomeClient({ initialEvents }: HomeClientProps) {
       </section>
 
       {/* 3. TICKET TIERS BREAKDOWN (NO TAX FEE!) */}
-      <section className="border-t border-white/10 bg-[#0e0a16]/80 py-16 sm:py-20">
+      <section id="secure" className="border-t border-white/10 bg-[#0e0a16]/80 py-16 sm:py-20 scroll-mt-20">
         <div className="mx-auto max-w-6xl px-4 sm:px-6">
           <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
             <div>
@@ -437,13 +469,15 @@ export function HomeClient({ initialEvents }: HomeClientProps) {
 
           <div className="mt-8 grid gap-6 md:grid-cols-3">
             {heroEvent.tiers.map((tier) => {
-              const isOnline = tier.availableOnline !== false;
+              const isFdc = tier.id.includes("fdc");
+              const isPurchasable =
+                tier.availableOnline !== false && tier.stock > 0;
 
               return (
                 <div
                   key={tier.id}
                   className={`flex flex-col justify-between rounded-3xl border p-6 transition ${
-                    isOnline
+                    isPurchasable
                       ? "border-white/15 bg-[#140f1d] hover:border-[#ff9e68]/50"
                       : "border-white/10 bg-white/[0.02] opacity-75"
                   }`}
@@ -456,7 +490,7 @@ export function HomeClient({ initialEvents }: HomeClientProps) {
                       {tier.badge && (
                         <span
                           className={`rounded-full px-2.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wider ${
-                            isOnline
+                            isPurchasable
                               ? "bg-[#ff7a3d] text-[#09070f]"
                               : "bg-zinc-800 text-zinc-400 border border-zinc-700"
                           }`}
@@ -478,11 +512,11 @@ export function HomeClient({ initialEvents }: HomeClientProps) {
                         {formatIdr(tier.priceIdr)}
                       </div>
                       <span className="text-[11px] text-zinc-400">
-                        {tier.id === "tfn-presale-2" && !isOnline
-                          ? "Closed / Ditutup"
-                          : isOnline
+                        {isPurchasable
                           ? "Harga Bersih / Net Price"
-                          : "On The Spot Only"}
+                          : isFdc
+                          ? "On The Spot Only"
+                          : tier.badge || "Closed / Sold Out"}
                       </span>
                     </div>
 
@@ -499,7 +533,7 @@ export function HomeClient({ initialEvents }: HomeClientProps) {
                   </div>
 
                   <div className="mt-6 pt-4 border-t border-white/10">
-                    {isOnline ? (
+                    {isPurchasable ? (
                       <Link
                         href={`/events/${heroEvent.slug}`}
                         className="btn-lift flex w-full items-center justify-center gap-1.5 rounded-full bg-[#ff7a3d] py-3 text-xs font-black uppercase tracking-wider text-[#09070f] hover:bg-[#ff945f]"
@@ -513,7 +547,11 @@ export function HomeClient({ initialEvents }: HomeClientProps) {
                         disabled
                         className="flex w-full items-center justify-center rounded-full border border-white/10 bg-white/5 py-3 text-xs font-bold text-zinc-500 cursor-not-allowed"
                       >
-                        {tier.id === "tfn-presale-2" ? "Ditutup Sementara" : "Tidak Dijual Online"}
+                        {isFdc
+                          ? "On The Spot di Venue"
+                          : tier.availableOnline !== false && tier.stock <= 0
+                          ? "Habis Terjual (Sold Out)"
+                          : "Penjualan Ditutup (Closed)"}
                       </button>
                     )}
                   </div>
@@ -532,11 +570,22 @@ export function HomeClient({ initialEvents }: HomeClientProps) {
                     Ketentuan Masuk Gate &amp; Late Fee
                   </div>
                   <p className="leading-relaxed">
-                    • <strong>Presale 1:</strong> Batas masuk (Max Entry) pukul <span className="font-bold text-[#ff9e68]">23:30 WIB</span> (Presale 2 saat ini ditutup sementara).
+                    •{" "}
+                    <strong>
+                      {openPresales.length > 0
+                        ? openPresales.map((t) => t.name).join(" & ")
+                        : "Presale"}
+                      :
+                    </strong>{" "}
+                    Batas masuk (Max Entry) pukul{" "}
+                    <span className="font-bold text-[#ff9e68]">23:30 WIB</span>
+                    {closedPresales.length > 0 &&
+                      ` (${closedPresales.map((t) => t.name).join(" & ")} saat ini ditutup)`}
+                    .
                     <br />
                     • <strong>Late Fee:</strong> Keterlambatan kedatangan tiket Presale (23:30 – 00:00 WIB) dikenakan Late Fee <span className="font-bold text-amber-300">Rp 100.000 / tiket</span> di pintu masuk venue.
                     <br />
-                    • <strong>Mulai Pukul 00:00 WIB:</strong> Loket gate beralih ke tiket <span className="font-bold text-white">FDC (Rp 300.000 On The Spot)</span> — <em>Bebas masuk tanpa batas jam hingga acara selesai</em>.
+                    • <strong>Mulai Pukul 00:00 WIB:</strong> Loket gate beralih ke tiket <span className="font-bold text-white">FDC ({formatIdr(fdcTier?.priceIdr ?? 300000)} On The Spot)</span> — <em>Bebas masuk tanpa batas jam hingga acara selesai</em>.
                   </p>
                 </div>
               </div>
@@ -706,7 +755,7 @@ export function HomeClient({ initialEvents }: HomeClientProps) {
       </section>
 
       {/* 6. NEED TO KNOW (FAQ Accordion) */}
-      <section id="faq" className="border-t border-white/10 bg-[#0e0a16]/70 py-16 sm:py-20">
+      <section id="faq" className="border-t border-white/10 bg-[#0e0a16]/70 py-16 sm:py-20 scroll-mt-20">
         <div className="mx-auto max-w-6xl px-4 sm:px-6">
           <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
             <div>
@@ -767,7 +816,7 @@ export function HomeClient({ initialEvents }: HomeClientProps) {
       </section>
 
       {/* 7. EVENT VENUE LOCATION */}
-      <section id="location" className="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-20">
+      <section id="location" className="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-20 scroll-mt-20">
         <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
           <div>
             <p className="kicker">Venue &amp; Directions</p>

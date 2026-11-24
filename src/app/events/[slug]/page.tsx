@@ -16,7 +16,7 @@ export default async function EventDetailPage({
 }) {
   await connection();
   const { slug } = await params;
-  const event = getEventBySlug(slug);
+  const event = await getEventBySlug(slug);
 
   if (!event) {
     notFound();

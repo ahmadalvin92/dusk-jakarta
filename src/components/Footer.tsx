@@ -15,7 +15,7 @@ function InstagramIcon({ className = "h-4 w-4" }: { className?: string }) {
 
 export function Footer() {
   return (
-    <footer className="border-t border-white/10 bg-[#07050b] py-10">
+    <footer className="border-t border-white/10 bg-[#07050b] py-10 print:hidden">
       <div className="mx-auto flex max-w-6xl flex-col items-start justify-between gap-6 px-4 sm:flex-row sm:items-center sm:px-6">
         <div className="space-y-2">
           <DuskLogo size="sm" />

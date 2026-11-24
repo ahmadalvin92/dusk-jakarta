@@ -1,30 +1,10 @@
 import { NextResponse } from "next/server";
 import { getAllOrders, updateOrderStatus, softDeleteOrder, restoreOrder } from "@/lib/store";
+import { verifyAdminRequest } from "@/lib/admin-auth";
 import { OrderPaymentStatus } from "@/types/event";
 
-function verifyAdmin(request: Request): boolean {
-  const token =
-    request.headers.get("x-admin-token") ||
-    request.headers.get("authorization") ||
-    "";
-  const pin = request.headers.get("x-admin-pin") || "";
-  const adminPin = process.env.ADMIN_PIN || "1212";
-
-  // Support dusk token
-  if (token.startsWith("dusk_token_") || token.includes("benji")) {
-    return true;
-  }
-
-  // Support legacy PIN
-  if (pin === adminPin || pin === "1212") {
-    return true;
-  }
-
-  return false;
-}
-
 export async function GET(request: Request) {
-  if (!verifyAdmin(request)) {
+  if (!verifyAdminRequest(request)) {
     return NextResponse.json({ error: "Unauthorized: Silakan login terlebih dahulu." }, { status: 401 });
   }
 
@@ -38,7 +18,7 @@ export async function GET(request: Request) {
 }
 
 export async function PATCH(request: Request) {
-  if (!verifyAdmin(request)) {
+  if (!verifyAdminRequest(request)) {
     return NextResponse.json({ error: "Unauthorized: Silakan login terlebih dahulu." }, { status: 401 });
   }
 
@@ -90,7 +70,7 @@ export async function PATCH(request: Request) {
 }
 
 export async function DELETE(request: Request) {
-  if (!verifyAdmin(request)) {
+  if (!verifyAdminRequest(request)) {
     return NextResponse.json({ error: "Unauthorized: Silakan login terlebih dahulu." }, { status: 401 });
   }
 

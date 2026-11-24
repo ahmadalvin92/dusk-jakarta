@@ -41,7 +41,7 @@ export const SITE_CONFIG = {
       num: "01",
       question: "Bagaimana cara kerja pembayaran tiket manual & approval?",
       answer:
-        "Pilih tiket Presale yang sedang aktif (Presale 1), isi data pengunjung, lalu lakukan transfer sesuai nominal ke rekening BCA resmi kami. Setelah itu kirim foto struk bukti transfer ke WhatsApp panitia. Status tiket akan langsung diverifikasi dan di-approve oleh tim panitia DUSK JAKARTA.",
+        "Pilih kategori tiket Presale yang sedang dibuka secara online, isi data pengunjung, lalu lakukan transfer sesuai nominal ke rekening BCA resmi kami. Setelah itu kirim foto struk bukti transfer ke WhatsApp panitia. Status tiket akan langsung diverifikasi dan di-approve oleh tim panitia DUSK JAKARTA.",
     },
     {
       num: "02",
@@ -84,6 +84,23 @@ export function cleanWhatsappPhone(raw: string): string {
     cleaned = "62" + cleaned;
   }
   return cleaned || "6281586868200";
+}
+
+export function isValidWhatsappNumber(raw: string): boolean {
+  const digits = (raw || "").replace(/\D/g, "");
+  return digits.length >= 8 && digits.length <= 15;
+}
+
+export function isValidEmail(raw: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test((raw || "").trim());
+}
+
+export function stripInternalAdminNotes(notes?: string): string {
+  if (!notes) return "";
+  return notes
+    .replace(/\[DELETED\]\s*/gi, "")
+    .replace(/\[PR:\s*[^\]]+\]\s*(\(Proof attached\))?\s*/gi, "")
+    .trim();
 }
 
 export function buildWhatsappUrl(message: string, customPhone?: string): string {

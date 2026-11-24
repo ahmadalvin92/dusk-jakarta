@@ -16,18 +16,22 @@ import {
   Lock,
   MapPin,
   MessageCircle,
+  Pencil,
+  Power,
   Printer,
   QrCode,
   RefreshCw,
   RotateCcw,
+  Save,
   Search,
   ShieldCheck,
+  SlidersHorizontal,
   Ticket,
   Trash2,
   User,
   X,
 } from "lucide-react";
-import { TicketOrder, OrderPaymentStatus } from "@/types/event";
+import { TicketOrder, OrderPaymentStatus, TicketTier, DuskEvent } from "@/types/event";
 import { formatIdr } from "@/data/events";
 import { DuskLogo } from "@/components/DuskLogo";
 import { cleanWhatsappPhone } from "@/data/site";
@@ -57,8 +61,29 @@ export default function AdminPage() {
   const [selectedPrintOrder, setSelectedPrintOrder] = useState<TicketOrder | null>(null);
   const [modalQrDataUrl, setModalQrDataUrl] = useState<string>("");
 
+  // Tier Management state (Event: till-further-notice)
+  const [tiers, setTiers] = useState<TicketTier[]>([]);
+  const [tiersLoading, setTiersLoading] = useState<boolean>(false);
+  const [savingTierId, setSavingTierId] = useState<string | null>(null);
+  const [editingTierId, setEditingTierId] = useState<string | null>(null);
+  const [tierForm, setTierForm] = useState<{
+    priceIdr: string;
+    stock: string;
+    badge: string;
+    maxEntryTime: string;
+    description: string;
+  }>({
+    priceIdr: "",
+    stock: "",
+    badge: "",
+    maxEntryTime: "",
+    description: "",
+  });
+  const [tierFeedback, setTierFeedback] = useState<string | null>(null);
+
   // Scanner gate search code
   const [scanInput, setScanInput] = useState<string>("");
+  const [scanLoading, setScanLoading] = useState<boolean>(false);
   const [scanResult, setScanResult] = useState<{
     found: boolean;
     order?: TicketOrder;
@@ -73,6 +98,7 @@ export default function AdminPage() {
       setAuthToken(savedToken);
       setLoggedInUser(savedUser);
       fetchOrders(savedToken);
+      fetchTiers(savedToken);
     }
   }, []);
 
@@ -126,7 +152,7 @@ export default function AdminPage() {
       localStorage.setItem("dusk_admin_token", data.token);
       localStorage.setItem("dusk_admin_user", data.user?.username || "benji");
 
-      await fetchOrders(data.token);
+      await Promise.all([fetchOrders(data.token), fetchTiers(data.token)]);
     } catch {
       setAuthError("Gagal menghubungi server login.");
     } finally {
@@ -161,6 +187,146 @@ export default function AdminPage() {
     }
   };
 
+  const fetchTiers = async (token: string) => {
+    setTiersLoading(true);
+    try {
+      const res = await fetch("/api/admin/tiers", {
+        headers: {
+          "x-admin-token": token,
+        },
+        cache: "no-store",
+      });
+      if (!res.ok) return;
+      const data = (await res.json()) as { events?: DuskEvent[] };
+      const mainEvt =
+        data.events?.find((e) => e.slug === "till-further-notice") ??
+        data.events?.[0];
+      if (mainEvt) {
+        setTiers(mainEvt.tiers || []);
+      }
+    } catch {
+      // Ignore network hiccup
+    } finally {
+      setTiersLoading(false);
+    }
+  };
+
+  const showTierNotice = (msg: string) => {
+    setTierFeedback(msg);
+    setTimeout(() => {
+      setTierFeedback((prev) => (prev === msg ? null : prev));
+    }, 3500);
+  };
+
+  const handleToggleTierOnline = async (tier: TicketTier) => {
+    const nextOnline = tier.availableOnline === false;
+    setSavingTierId(tier.id);
+    try {
+      const res = await fetch("/api/admin/tiers", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          "x-admin-token": authToken,
+        },
+        body: JSON.stringify({
+          eventSlug: "till-further-notice",
+          tierId: tier.id,
+          availableOnline: nextOnline,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error || "Gagal mengubah status tier.");
+        return;
+      }
+      if (data.event?.tiers) {
+        setTiers(data.event.tiers);
+      } else {
+        await fetchTiers(authToken);
+      }
+      if (editingTierId === tier.id && data.tier) {
+        setTierForm({
+          priceIdr: String(data.tier.priceIdr),
+          stock: String(data.tier.stock),
+          badge: data.tier.badge || "",
+          maxEntryTime: data.tier.maxEntryTime || "",
+          description: data.tier.description || "",
+        });
+      }
+      showTierNotice(
+        `${tier.name} sekarang ${nextOnline ? "DIBUKA ONLINE" : "DITUTUP (CLOSED)"}.`
+      );
+    } catch {
+      alert("Gagal menghubungi server saat mengubah status tier.");
+    } finally {
+      setSavingTierId(null);
+    }
+  };
+
+  const handleStartEditTier = (tier: TicketTier) => {
+    if (editingTierId === tier.id) {
+      setEditingTierId(null);
+      return;
+    }
+    setEditingTierId(tier.id);
+    setTierForm({
+      priceIdr: String(tier.priceIdr),
+      stock: String(tier.stock),
+      badge: tier.badge || "",
+      maxEntryTime: tier.maxEntryTime || "",
+      description: tier.description || "",
+    });
+  };
+
+  const handleSaveTierDetails = async (tierId: string) => {
+    const parsedPrice = Number(tierForm.priceIdr);
+    const parsedStock = Number(tierForm.stock);
+    if (!Number.isFinite(parsedPrice) || parsedPrice < 0) {
+      alert("Harga tidak valid.");
+      return;
+    }
+    if (!Number.isFinite(parsedStock) || parsedStock < 0) {
+      alert("Stok tidak valid.");
+      return;
+    }
+
+    setSavingTierId(tierId);
+    try {
+      const res = await fetch("/api/admin/tiers", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          "x-admin-token": authToken,
+        },
+        body: JSON.stringify({
+          eventSlug: "till-further-notice",
+          tierId,
+          priceIdr: parsedPrice,
+          stock: Math.floor(parsedStock),
+          badge: tierForm.badge.trim(),
+          maxEntryTime: tierForm.maxEntryTime.trim(),
+          description: tierForm.description.trim(),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error || "Gagal menyimpan perubahan tier.");
+        return;
+      }
+      if (data.event?.tiers) {
+        setTiers(data.event.tiers);
+      } else {
+        await fetchTiers(authToken);
+      }
+      setEditingTierId(null);
+      showTierNotice(`Pengaturan ${data.tier?.name || tierId} berhasil disimpan.`);
+    } catch {
+      alert("Gagal menghubungi server saat menyimpan detail tier.");
+    } finally {
+      setSavingTierId(null);
+    }
+  };
+
   const handleUpdateStatus = async (
     orderCode: string,
     newStatus: OrderPaymentStatus
@@ -192,6 +358,7 @@ export default function AdminPage() {
             prev ? { ...prev, paymentStatus: newStatus } : null
           );
         }
+        await fetchTiers(authToken);
       } else {
         alert("Gagal memperbarui status order.");
       }
@@ -208,17 +375,48 @@ export default function AdminPage() {
     link.click();
   };
 
-  const handleScanGateCheck = (e: React.FormEvent) => {
+  const handleScanGateCheck = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!scanInput.trim()) return;
 
-    // Bersihkan input (bisa URL atau kode murni)
+    // Bersihkan input (bisa URL lengkap, query/hash, atau kode murni)
     const raw = scanInput.trim();
-    const cleanCode = raw.includes("/ticket/")
-      ? raw.split("/ticket/")[1]?.split("?")[0]?.toUpperCase()
-      : raw.toUpperCase();
+    const cleanCode = (
+      raw.includes("/ticket/")
+        ? raw.split("/ticket/")[1] ?? ""
+        : raw
+    )
+      .split(/[?#]/)[0]
+      .replace(/\/+$/, "")
+      .trim()
+      .toUpperCase();
 
-    const matched = orders.find((o) => o.orderCode.toUpperCase() === cleanCode);
+    if (!cleanCode) return;
+
+    setScanLoading(true);
+    let matched: TicketOrder | undefined;
+    try {
+      const res = await fetch(`/api/tickets/${encodeURIComponent(cleanCode)}`, {
+        cache: "no-store",
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.order) {
+          matched = data.order as TicketOrder;
+          setOrders((prev) =>
+            prev.some((o) => o.orderCode === matched!.orderCode)
+              ? prev.map((o) => (o.orderCode === matched!.orderCode ? matched! : o))
+              : [matched!, ...prev]
+          );
+        }
+      }
+    } catch {
+      // Fallback to in-memory list when offline
+      matched = orders.find((o) => o.orderCode.toUpperCase() === cleanCode);
+    } finally {
+      setScanLoading(false);
+    }
+
     if (!matched) {
       setScanResult({
         found: false,
@@ -291,6 +489,7 @@ export default function AdminPage() {
             prev ? { ...prev, isDeleted: true, deletedAt: nowISO } : null
           );
         }
+        await fetchTiers(authToken);
       } else {
         alert("Gagal memindahkan pesanan ke Recycle Bin.");
       }
@@ -329,6 +528,7 @@ export default function AdminPage() {
             prev ? { ...prev, isDeleted: false, deletedAt: undefined } : null
           );
         }
+        await fetchTiers(authToken);
       } else {
         alert("Gagal memulihkan pesanan dari Recycle Bin.");
       }
@@ -472,9 +672,13 @@ export default function AdminPage() {
 
   // Admin Dashboard View
   return (
-    <div className="min-h-screen bg-[#09070f] text-white">
+    <div className="min-h-screen bg-[#09070f] text-white print:bg-white">
       {/* Top Header */}
-      <header className="sticky top-0 z-30 border-b border-white/10 bg-[#09070f]/90 backdrop-blur-xl">
+      <header
+        className={`sticky top-0 z-30 border-b border-white/10 bg-[#09070f]/90 backdrop-blur-xl ${
+          selectedPrintOrder ? "print:hidden" : ""
+        }`}
+      >
         <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3.5 sm:px-6">
           <div className="flex items-center gap-4">
             <DuskLogo size="sm" />
@@ -489,12 +693,15 @@ export default function AdminPage() {
           <div className="flex items-center gap-3">
             <button
               type="button"
-              onClick={() => fetchOrders(authToken)}
+              onClick={() => {
+                fetchOrders(authToken);
+                fetchTiers(authToken);
+              }}
               className="inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-white/5 px-3 py-1.5 text-xs font-semibold hover:border-white/30"
             >
               <RefreshCw
                 className={`h-3.5 w-3.5 text-[#ff9e68] ${
-                  loading ? "animate-spin" : ""
+                  loading || tiersLoading ? "animate-spin" : ""
                 }`}
               />
               Refresh Data
@@ -511,7 +718,11 @@ export default function AdminPage() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6">
+      <main
+        className={`mx-auto max-w-7xl px-4 py-8 sm:px-6 ${
+          selectedPrintOrder ? "print:hidden" : ""
+        }`}
+      >
         {/* Stats Row */}
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <div className="rounded-2xl border border-white/10 bg-[#120d1b] p-5">
@@ -557,6 +768,304 @@ export default function AdminPage() {
           </div>
         </div>
 
+        {/* Tier Management: Pengaturan Tiket & Buka/Tutup Tier */}
+        <section className="mt-8 rounded-2xl border border-white/15 bg-[#120d1b] p-5 sm:p-6">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-white/10 pb-4">
+            <div>
+              <div className="flex items-center gap-2 text-xs font-extrabold uppercase tracking-wider text-[#ff9e68]">
+                <SlidersHorizontal className="h-4 w-4" />
+                Pengaturan Tiket &amp; Buka/Tutup Tier
+              </div>
+              <p className="mt-1 text-xs text-[#b4a4c3]">
+                Kontrol langsung pembukaan/penutupan Presale 1, Presale 2, harga, stok, dan jam masuk. Perubahan langsung live di website.
+              </p>
+            </div>
+
+            {tierFeedback && (
+              <div className="rounded-full border border-emerald-500/40 bg-emerald-500/15 px-3.5 py-1.5 text-xs font-bold text-emerald-300">
+                ✅ {tierFeedback}
+              </div>
+            )}
+          </div>
+
+          <div className="mt-5 grid gap-4 md:grid-cols-3">
+            {tiers.map((tier) => {
+              const isSaving = savingTierId === tier.id;
+              const isEditing = editingTierId === tier.id;
+              const isOpenOnline = tier.availableOnline !== false;
+              const isSoldOut = isOpenOnline && tier.stock <= 0;
+              const isFdc = tier.id.includes("fdc");
+
+              const tierApprovedPax = activeOrders
+                .filter(
+                  (o) =>
+                    o.tierId === tier.id && o.paymentStatus === "approved"
+                )
+                .reduce((sum, o) => sum + (o.quantity || 0), 0);
+              const tierPendingPax = activeOrders
+                .filter(
+                  (o) =>
+                    o.tierId === tier.id && o.paymentStatus === "pending"
+                )
+                .reduce((sum, o) => sum + (o.quantity || 0), 0);
+
+              return (
+                <div
+                  key={tier.id}
+                  className={`flex flex-col justify-between rounded-2xl border p-4 transition ${
+                    isOpenOnline && !isSoldOut
+                      ? "border-emerald-500/35 bg-[#161022]"
+                      : isFdc
+                      ? "border-amber-500/25 bg-[#130e1c]"
+                      : "border-rose-500/25 bg-black/40"
+                  }`}
+                >
+                  <div>
+                    {/* Card Header & Status Pill */}
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <h3 className="text-base font-black uppercase text-white">
+                          {tier.name}
+                        </h3>
+                        <p className="text-[11px] font-mono text-zinc-400">
+                          {tier.id}
+                        </p>
+                      </div>
+                      <span
+                        className={`rounded-full px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-wider shrink-0 ${
+                          isOpenOnline && !isSoldOut
+                            ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
+                            : isSoldOut
+                            ? "bg-amber-500/20 text-amber-300 border border-amber-500/40"
+                            : isFdc
+                            ? "bg-amber-500/15 text-amber-300 border border-amber-500/30"
+                            : "bg-rose-500/20 text-rose-300 border border-rose-500/40"
+                        }`}
+                      >
+                        {isOpenOnline && !isSoldOut
+                          ? "🟢 DIBUKA ONLINE"
+                          : isSoldOut
+                          ? "⚠️ HABIS / STOK 0"
+                          : isFdc
+                          ? "🟡 ON THE SPOT"
+                          : "🔴 DITUTUP (CLOSED)"}
+                      </span>
+                    </div>
+
+                    {/* Key Metrics */}
+                    <div className="mt-4 grid grid-cols-2 gap-2 rounded-xl border border-white/10 bg-black/40 p-3 text-xs">
+                      <div>
+                        <span className="text-[10px] uppercase text-zinc-500">
+                          Harga
+                        </span>
+                        <div className="font-black text-white">
+                          {formatIdr(tier.priceIdr)}
+                        </div>
+                      </div>
+                      <div>
+                        <span className="text-[10px] uppercase text-zinc-500">
+                          Sisa Kuota
+                        </span>
+                        <div className="font-black text-[#ff9e68]">
+                          {isFdc ? "OTS" : `${tier.stock} pax`}
+                        </div>
+                      </div>
+                      <div className="col-span-2 border-t border-white/10 pt-2">
+                        <span className="text-[10px] uppercase text-zinc-500">
+                          Max Entry &amp; Badge Publik
+                        </span>
+                        <div className="text-[11px] text-white font-semibold">
+                          {tier.maxEntryTime} · {tier.badge || "-"}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Live Order Count */}
+                    <div className="mt-2.5 flex items-center justify-between text-[11px] text-[#b4a4c3] px-1">
+                      <span>
+                        Approved:{" "}
+                        <strong className="text-emerald-400">
+                          {tierApprovedPax} pax
+                        </strong>
+                      </span>
+                      <span>
+                        Pending:{" "}
+                        <strong className="text-amber-300">
+                          {tierPendingPax} pax
+                        </strong>
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Quick Open/Close & Edit Controls */}
+                  <div className="mt-4 space-y-2 pt-3 border-t border-white/10">
+                    <button
+                      type="button"
+                      disabled={isSaving}
+                      onClick={() => handleToggleTierOnline(tier)}
+                      className={`btn-lift flex w-full items-center justify-center gap-1.5 rounded-xl py-2.5 text-xs font-black uppercase tracking-wider transition disabled:opacity-40 ${
+                        isOpenOnline
+                          ? "border border-rose-500/40 bg-rose-500/15 text-rose-300 hover:bg-rose-500/25"
+                          : "bg-emerald-500 text-[#09070f] hover:bg-emerald-400"
+                      }`}
+                    >
+                      <Power className="h-3.5 w-3.5" />
+                      {isSaving
+                        ? "Menyimpan..."
+                        : isOpenOnline
+                        ? "Tutup Penjualan (Close)"
+                        : "Buka Penjualan Online (Open)"}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleStartEditTier(tier)}
+                      className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-white/15 bg-white/5 py-2 text-[11px] font-bold text-white hover:border-[#ff9e68]"
+                    >
+                      <Pencil className="h-3 w-3 text-[#ff9e68]" />
+                      {isEditing ? "Tutup Editor Detail" : "Atur Detail / Harga / Stok"}
+                    </button>
+
+                    {isEditing && (
+                      <div className="mt-3 space-y-2.5 rounded-xl border border-[#ff7a3d]/30 bg-black/60 p-3 text-xs">
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="text-[10px] font-bold uppercase text-zinc-400">
+                              Harga (IDR)
+                            </label>
+                            <input
+                              type="number"
+                              min={0}
+                              value={tierForm.priceIdr}
+                              onChange={(e) =>
+                                setTierForm((prev) => ({
+                                  ...prev,
+                                  priceIdr: e.target.value,
+                                }))
+                              }
+                              className="mt-1 w-full rounded-lg border border-white/20 bg-black px-2.5 py-1.5 text-xs text-white outline-none focus:border-[#ff7a3d]"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[10px] font-bold uppercase text-zinc-400">
+                              Sisa Stok
+                            </label>
+                            <input
+                              type="number"
+                              min={0}
+                              value={tierForm.stock}
+                              onChange={(e) =>
+                                setTierForm((prev) => ({
+                                  ...prev,
+                                  stock: e.target.value,
+                                }))
+                              }
+                              className="mt-1 w-full rounded-lg border border-white/20 bg-black px-2.5 py-1.5 text-xs text-white outline-none focus:border-[#ff7a3d]"
+                            />
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="text-[10px] font-bold uppercase text-zinc-400">
+                            Badge Publik
+                          </label>
+                          <input
+                            type="text"
+                            value={tierForm.badge}
+                            onChange={(e) =>
+                              setTierForm((prev) => ({
+                                ...prev,
+                                badge: e.target.value,
+                              }))
+                            }
+                            placeholder="Tersedia Online / Sold Out"
+                            className="mt-1 w-full rounded-lg border border-white/20 bg-black px-2.5 py-1.5 text-xs text-white outline-none focus:border-[#ff7a3d]"
+                          />
+                          <div className="mt-1.5 flex flex-wrap gap-1">
+                            {[
+                              "Tersedia Online",
+                              "Sold Out / Closed",
+                              "Closed / Ditutup",
+                              "Last Call",
+                              "Not Sold Online / On The Spot",
+                            ].map((preset) => (
+                              <button
+                                key={preset}
+                                type="button"
+                                onClick={() =>
+                                  setTierForm((prev) => ({
+                                    ...prev,
+                                    badge: preset,
+                                  }))
+                                }
+                                className="rounded-md border border-white/10 bg-white/5 px-1.5 py-0.5 text-[9px] text-zinc-300 hover:border-[#ff7a3d]"
+                              >
+                                {preset}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="text-[10px] font-bold uppercase text-zinc-400">
+                            Max Entry Time
+                          </label>
+                          <input
+                            type="text"
+                            value={tierForm.maxEntryTime}
+                            onChange={(e) =>
+                              setTierForm((prev) => ({
+                                ...prev,
+                                maxEntryTime: e.target.value,
+                              }))
+                            }
+                            className="mt-1 w-full rounded-lg border border-white/20 bg-black px-2.5 py-1.5 text-xs text-white outline-none focus:border-[#ff7a3d]"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="text-[10px] font-bold uppercase text-zinc-400">
+                            Deskripsi
+                          </label>
+                          <textarea
+                            rows={2}
+                            value={tierForm.description}
+                            onChange={(e) =>
+                              setTierForm((prev) => ({
+                                ...prev,
+                                description: e.target.value,
+                              }))
+                            }
+                            className="mt-1 w-full rounded-lg border border-white/20 bg-black px-2.5 py-1.5 text-xs text-white outline-none focus:border-[#ff7a3d]"
+                          />
+                        </div>
+
+                        <div className="flex items-center gap-2 pt-1">
+                          <button
+                            type="button"
+                            disabled={isSaving}
+                            onClick={() => handleSaveTierDetails(tier.id)}
+                            className="inline-flex flex-1 items-center justify-center gap-1 rounded-lg bg-[#ff7a3d] py-1.5 text-xs font-black uppercase text-[#09070f] hover:bg-[#ff945f] disabled:opacity-40"
+                          >
+                            <Save className="h-3 w-3" /> Simpan
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setEditingTierId(null)}
+                            className="rounded-lg border border-white/15 bg-white/5 px-3 py-1.5 text-xs font-bold text-zinc-300 hover:text-white"
+                          >
+                            Batal
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+
         {/* Gate Scanner / Fast QR Verification Tool */}
         <div className="mt-8 rounded-2xl border border-[#ff7a3d]/30 bg-gradient-to-r from-[#170e24] via-[#120d1b] to-[#09070f] p-5">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -580,9 +1089,10 @@ export default function AdminPage() {
               />
               <button
                 type="submit"
-                className="btn-lift rounded-xl bg-[#ff7a3d] px-4 py-2 text-xs font-black uppercase text-[#09070f] shrink-0"
+                disabled={scanLoading}
+                className="btn-lift rounded-xl bg-[#ff7a3d] px-4 py-2 text-xs font-black uppercase text-[#09070f] shrink-0 disabled:opacity-50"
               >
-                Cek Tiket
+                {scanLoading ? "Mengecek..." : "Cek Tiket"}
               </button>
             </form>
           </div>
@@ -891,15 +1401,15 @@ export default function AdminPage() {
       {/* MODAL CETAK TIKET & QR CODE (SIAP PRINT / PDF / DOWNLOAD) */}
       {selectedPrintOrder && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4 backdrop-blur-md overflow-y-auto"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4 backdrop-blur-md overflow-y-auto print:static print:inset-auto print:bg-transparent print:p-0 print:overflow-visible"
           onClick={() => setSelectedPrintOrder(null)}
         >
           <div
-            className="relative w-full max-w-lg rounded-3xl border border-white/20 bg-[#120d1b] p-6 shadow-2xl overflow-hidden my-8"
+            className="relative w-full max-w-lg rounded-3xl border border-white/20 bg-[#120d1b] p-6 shadow-2xl overflow-hidden my-8 print:my-0 print:max-w-none print:border-0 print:bg-transparent print:p-0 print:shadow-none"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Top Modal Controls */}
-            <div className="flex items-center justify-between pb-4 border-b border-white/10">
+            <div className="flex items-center justify-between pb-4 border-b border-white/10 print:hidden">
               <div className="flex items-center gap-2">
                 <Ticket className="h-4 w-4 text-[#ff9e68]" />
                 <h3 className="text-sm font-black uppercase text-white">
@@ -916,7 +1426,7 @@ export default function AdminPage() {
             </div>
 
             {/* Printable Ticket Pass Body */}
-            <div className="mt-4 rounded-2xl border border-white/15 bg-[#09070f] p-5 text-white">
+            <div className="mt-4 rounded-2xl border border-white/15 bg-[#09070f] p-5 text-white print:mt-0 print:border-black/20">
               <div className="flex items-center justify-between border-b border-white/10 pb-3">
                 <DuskLogo size="sm" />
                 <span
@@ -1013,7 +1523,7 @@ export default function AdminPage() {
             </div>
 
             {/* Action Buttons for Print / Download QR */}
-            <div className="mt-5 flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-white/10">
+            <div className="mt-5 flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-white/10 print:hidden">
               <div className="flex items-center gap-2">
                 <button
                   type="button"

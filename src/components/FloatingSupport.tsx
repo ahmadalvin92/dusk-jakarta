@@ -8,7 +8,7 @@ export function FloatingSupport() {
   const [open, setOpen] = useState(false);
 
   return (
-    <div className="fixed bottom-5 right-5 z-40 flex flex-col items-end gap-3">
+    <div className="fixed bottom-5 right-5 z-40 flex flex-col items-end gap-3 print:hidden">
       {open && (
         <div className="w-72 rounded-2xl border border-[#ff9e68]/25 bg-[#140e1f]/95 p-4 shadow-[0_18px_50px_rgba(0,0,0,0.8)] backdrop-blur-xl">
           <div className="flex items-center justify-between border-b border-white/10 pb-2.5">
@@ -50,7 +50,8 @@ export function FloatingSupport() {
 
             <a
               href={buildWhatsappUrl(
-                "Halo tim DUSK JAKARTA, saya ingin reservasi VIP Table / kerja sama event."
+                "Halo tim DUSK JAKARTA, saya ingin reservasi VIP Table / kerja sama event.",
+                SITE_CONFIG.tableRsvpWhatsapp
               )}
               target="_blank"
               rel="noopener noreferrer"

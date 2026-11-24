@@ -10,7 +10,7 @@ export const instant = false;
 
 export default async function HomePage() {
   await connection();
-  const events = getEventsWithLiveStock();
+  const events = await getEventsWithLiveStock();
 
   return (
     <div className="flex min-h-screen flex-col">
